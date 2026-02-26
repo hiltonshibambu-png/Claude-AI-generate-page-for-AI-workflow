@@ -3,10 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Site Intelligence Engine</title>
-<!-- Fonts -->
+<title>Site Intelligence Report</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<!-- React + Babel (no build step needed) -->
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -24,9 +22,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#f1f4f8}
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useRef, useCallback } = React;
+const { useState } = React;
 
-// ── DOMAIN CONFIG ─────────────────────────────────────────────────────────────
+const CLAUDE_API_KEY = "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";
+
 const DOMAINS = [
   { id:"geographic",   label:"Geographic Overview",              icon:"◈", color:"#0369a1", bg:"#e0f2fe", num:"01" },
   { id:"market",       label:"Market Landscape",                 icon:"◎", color:"#7c3aed", bg:"#ede9fe", num:"02" },
@@ -48,32 +47,62 @@ function buildPrompt(location, scopes) {
 
 LOCATION: ${location}
 
-Use your knowledge of this area and publicly available information (demographic data, planning frameworks, market intelligence, geographic context) to synthesise a rigorous briefing.
+Use your knowledge of this area and publicly available information to synthesise a rigorous briefing.
 
-Selected domains to cover:
+Selected domains:
 ${scopes.map((s,i) => `${i+1}. ${desc[s]}`).join("\n")}
 
-Return ONLY a valid JSON object — no markdown fencing, no preamble — matching this exact schema:
+Return ONLY a valid JSON object, no markdown fencing, no preamble, matching this schema:
 {
-  "location_confirmed": "Full resolved place name / address",
+  "location_confirmed": "Full resolved place name",
   "coordinates_approx": "Approx lat, lng",
   "report_date": "Month Year",
-  "executive_summary": "3–4 sentence synthesis of the most critical cross-domain findings and overall site verdict",
+  "executive_summary": "3-4 sentence synthesis of key findings and site verdict",
   "sections": [
     {
       "domain": "geographic|market|competitor|demographics|feasibility",
-      "headline": "Single punchy insight headline, max 12 words",
-      "narrative": "180–260 word professional narrative with specific local context, factual grounding, and analyst interpretation",
+      "headline": "Punchy insight headline max 12 words",
+      "narrative": "180-260 word professional narrative with local context and analyst interpretation",
       "key_points": ["Up to 6 concise data points or insights"],
       "confidence": 0.85,
       "limitations": "One sentence on data gaps or caveats"
     }
   ]
 }
-Only include sections for the selected domains. Be specific and factual. Note uncertainty in limitations.`;
+Only include sections for the selected domains. Be specific and factual.`;
 }
 
-// ── COMPONENTS ────────────────────────────────────────────────────────────────
+// XMLHttpRequest avoids CORS preflight that blocks fetch() from GitHub Pages
+function callClaude(prompt) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "https://api.anthropic.com/v1/messages", true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.setRequestHeader("x-api-key", CLAUDE_API_KEY);
+    xhr.setRequestHeader("anthropic-version", "2023-06-01");
+    xhr.setRequestHeader("anthropic-dangerous-request-header", "allowBrowserAccess");
+    xhr.timeout = 120000;
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch(e) { reject(new Error("Failed to parse response")); }
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err?.error?.message || `API error ${xhr.status}`));
+        } catch(e) { reject(new Error(`API error ${xhr.status}`)); }
+      }
+    };
+    xhr.onerror   = () => reject(new Error("Network error — check internet connection"));
+    xhr.ontimeout = () => reject(new Error("Request timed out after 2 minutes"));
+    xhr.send(JSON.stringify({
+      model: "claude-opus-4-6",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }]
+    }));
+  });
+}
+
 function Spinner() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
@@ -90,7 +119,7 @@ function ConfidenceBar({ value }) {
     <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
       <span style={{fontSize:9,color:"#9ca3af",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",textTransform:"uppercase"}}>Confidence</span>
       <div style={{width:56,height:3,background:"#e5e7eb",borderRadius:2,overflow:"hidden"}}>
-        <div style={{width:`${pct}%`,height:"100%",background:col,borderRadius:2,transition:"width 0.6s ease"}}/>
+        <div style={{width:`${pct}%`,height:"100%",background:col,borderRadius:2}}/>
       </div>
       <span style={{fontSize:9,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>{pct}%</span>
     </div>
@@ -108,8 +137,8 @@ function DomainCard({ section, index }) {
         <div style={{width:36,height:36,borderRadius:8,background:cfg.bg,color:cfg.color,
           display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{cfg.icon}</div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:cfg.color,
-            fontFamily:"'DM Mono',monospace",marginBottom:2}}>Domain {cfg.num}</div>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:cfg.color,fontFamily:"'DM Mono',monospace",marginBottom:2}}>Domain {cfg.num}</div>
           <div style={{fontSize:14,fontWeight:700,color:"#0f2d52",lineHeight:1.2}}>{cfg.label}</div>
         </div>
         <ConfidenceBar value={section.confidence}/>
@@ -160,22 +189,19 @@ function ProgressStep({ label, status }) {
   const c = map[status]||map.pending;
   return (
     <div style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:6,
-      background:c.bg,color:c.text,fontSize:12,fontWeight:500,transition:"all 0.2s"}}>
-      <span style={{width:18,height:18,borderRadius:"50%",background:c.text,color:"#fff",display:"flex",
-        alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,
+      background:c.bg,color:c.text,fontSize:12,fontWeight:500}}>
+      <span style={{width:18,height:18,borderRadius:"50%",background:c.text,color:"#fff",
+        display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,
         animation:status==="active"?"spin 1s linear infinite":"none"}}>{c.icon}</span>
       {label}
     </div>
   );
 }
 
-// ── MAIN APP ──────────────────────────────────────────────────────────────────
 function App() {
   const [address,  setAddress]  = useState("");
   const [lat,      setLat]      = useState("");
   const [lng,      setLng]      = useState("");
-  const [apiKey,   setApiKey]   = useState("");
-  const [showKey,  setShowKey]  = useState(false);
   const [scopes,   setScopes]   = useState(DOMAINS.map(d=>d.id));
   const [report,   setReport]   = useState(null);
   const [error,    setError]    = useState("");
@@ -188,81 +214,48 @@ function App() {
 
   async function generate() {
     const location = address.trim()||(lat&&lng?`${lat.trim()}, ${lng.trim()}`:"");
-    if (!location)    { setError("Please enter an address or coordinates."); return; }
-    if (!apiKey.trim()){ setError("Please enter your Claude API key."); return; }
+    if (!location)     { setError("Please enter an address or coordinates."); return; }
     if (!scopes.length){ setError("Select at least one intelligence domain."); return; }
-
     setError(""); setReport(null); setLoading(true);
     setProgress([
-      {id:"loc",   label:"Resolving location",      status:"active"},
-      {id:"ctx",   label:"Assembling site context",  status:"pending"},
-      {id:"ai",    label:"Claude AI synthesising",   status:"pending"},
-      {id:"render",label:"Building report",          status:"pending"},
+      {id:"loc",   label:"Resolving location",     status:"active"},
+      {id:"ctx",   label:"Assembling site context", status:"pending"},
+      {id:"ai",    label:"Claude AI synthesising",  status:"pending"},
+      {id:"render",label:"Building report",         status:"pending"},
     ]);
-
     try {
       await delay(500);
       setProgress(p=>p.map(s=>s.id==="loc"?{...s,status:"done"}:s.id==="ctx"?{...s,status:"active"}:s));
       await delay(400);
       setProgress(p=>p.map(s=>s.id==="ctx"?{...s,status:"done"}:s.id==="ai"?{...s,status:"active"}:s));
-
-      const res = await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "x-api-key":apiKey.trim(),
-          "anthropic-version":"2023-06-01",
-          "anthropic-dangerous-request-header":"allowBrowserAccess"
-        },
-        body:JSON.stringify({
-          model:"claude-opus-4-6",
-          max_tokens:4096,
-          messages:[{role:"user",content:buildPrompt(location,scopes)}]
-        }),
-      });
-
-      if (!res.ok){
-        const e = await res.json().catch(()=>({}));
-        throw new Error(e?.error?.message||`API error ${res.status}`);
-      }
-
-      const result = await res.json();
+      const result = await callClaude(buildPrompt(location, scopes));
       const raw = result.content?.[0]?.text||"";
       const data = JSON.parse(raw.replace(/^```json\s*/i,"").replace(/```\s*$/,"").trim());
-
       setProgress(p=>p.map(s=>s.id==="ai"?{...s,status:"done"}:s.id==="render"?{...s,status:"active"}:s));
       await delay(300);
       setProgress(p=>p.map(s=>s.id==="render"?{...s,status:"done"}:s));
       await delay(200);
-
       setReport(data);
       setHistory(p=>[{location,data,time:new Date()},...p].slice(0,5));
     } catch(e) {
       setProgress(p=>p.map(s=>["ai","render"].includes(s.id)?{...s,status:"error"}:s));
       setError(e.message||"Unknown error");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
-  const inp = {
-    width:"100%",padding:"8px 11px",border:"1.5px solid #e5e7eb",borderRadius:7,
-    fontFamily:"'DM Sans',sans-serif",fontSize:12.5,color:"#1f2937",background:"#fff",outline:"none",
-  };
+  const inp = {width:"100%",padding:"8px 11px",border:"1.5px solid #e5e7eb",borderRadius:7,
+    fontFamily:"'DM Sans',sans-serif",fontSize:12.5,color:"#1f2937",background:"#fff",outline:"none"};
 
   return (
     <div style={{display:"grid",gridTemplateRows:"52px 1fr",height:"100vh",
       fontFamily:"'DM Sans',sans-serif",background:"#f1f4f8",overflow:"hidden"}}>
 
-      {/* TOPBAR */}
-      <div style={{background:"#0f2d52",display:"flex",alignItems:"center",gap:12,padding:"0 22px",
-        position:"relative",overflow:"hidden"}}>
+      <div style={{background:"#0f2d52",display:"flex",alignItems:"center",gap:12,
+        padding:"0 22px",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 55%,rgba(30,114,184,0.25))"}}/>
         <div style={{width:28,height:28,background:"#1e72b8",borderRadius:6,display:"flex",
           alignItems:"center",justifyContent:"center",fontSize:14,zIndex:1}}>◈</div>
-        <span style={{fontFamily:"'DM Serif Display',serif",fontSize:17,color:"#fff",fontWeight:400,zIndex:1}}>
-          Site Intelligence Engine
-        </span>
+        <span style={{fontFamily:"'DM Serif Display',serif",fontSize:17,color:"#fff",zIndex:1}}>Site Intelligence Engine</span>
         <span style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.45)",letterSpacing:"0.1em",
           textTransform:"uppercase",fontFamily:"'DM Mono',monospace",zIndex:1}}>Powered by Claude AI</span>
         <span style={{background:"rgba(30,114,184,0.35)",border:"1px solid rgba(30,114,184,0.55)",
@@ -270,20 +263,17 @@ function App() {
           padding:"2px 8px",borderRadius:20,fontFamily:"'DM Mono',monospace",zIndex:1}}>MVP 1.0</span>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"330px 1fr",overflow:"hidden"}}>
+      <div style={{display:"grid",gridTemplateColumns:"300px 1fr",overflow:"hidden"}}>
 
-        {/* SIDEBAR */}
-        <div style={{background:"#fff",borderRight:"1px solid #e5e7eb",
-          display:"flex",flexDirection:"column",overflowY:"auto"}}>
+        <div style={{background:"#fff",borderRight:"1px solid #e5e7eb",display:"flex",flexDirection:"column",overflowY:"auto"}}>
 
-          {/* Location */}
           <div style={{padding:"18px 18px 14px",borderBottom:"1px solid #f3f4f6"}}>
             <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
               color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:12}}>Location</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               <input value={address} onChange={e=>setAddress(e.target.value)}
-                placeholder="Address or place name…"
-                onKeyDown={e=>e.key==="Enter"&&generate()} style={inp}/>
+                onKeyDown={e=>e.key==="Enter"&&generate()}
+                placeholder="Address or place name…" style={inp}/>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div style={{flex:1,height:1,background:"#f3f4f6"}}/>
                 <span style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>or</span>
@@ -296,23 +286,6 @@ function App() {
             </div>
           </div>
 
-          {/* API Key */}
-          <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
-            <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
-              color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:10}}>Claude API Key</div>
-            <div style={{position:"relative"}}>
-              <input type={showKey?"text":"password"} value={apiKey} onChange={e=>setApiKey(e.target.value)}
-                placeholder="sk-ant-api03-…"
-                style={{...inp,paddingRight:52,fontFamily:"'DM Mono',monospace",fontSize:11}}/>
-              <button onClick={()=>setShowKey(!showKey)} style={{position:"absolute",right:8,top:"50%",
-                transform:"translateY(-50%)",background:"none",border:"none",fontSize:11,fontWeight:600,
-                color:"#1e72b8",cursor:"pointer"}}>
-                {showKey?"Hide":"Show"}
-              </button>
-            </div>
-          </div>
-
-          {/* Domains */}
           <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
             <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
               color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:10}}>Report Domains</div>
@@ -338,12 +311,10 @@ function App() {
             </div>
           </div>
 
-          {/* Generate */}
           <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
             <button onClick={generate} disabled={loading} style={{
               width:"100%",padding:"11px 16px",
-              background:loading?"#6b7280":"#0f2d52",
-              color:"#fff",border:"none",borderRadius:8,
+              background:loading?"#6b7280":"#0f2d52",color:"#fff",border:"none",borderRadius:8,
               fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:600,
               cursor:loading?"not-allowed":"pointer",
               display:"flex",alignItems:"center",justifyContent:"center",gap:8,
@@ -357,12 +328,12 @@ function App() {
             </button>
             {error&&(
               <div style={{marginTop:10,padding:"9px 12px",background:"#fef2f2",
-                border:"1px solid rgba(220,38,38,0.2)",borderRadius:7,
-                fontSize:12,color:"#991b1b",lineHeight:1.5}}>{error}</div>
+                border:"1px solid rgba(220,38,38,0.2)",borderRadius:7,fontSize:12,color:"#991b1b",lineHeight:1.5}}>
+                {error}
+              </div>
             )}
           </div>
 
-          {/* Progress */}
           {progress.length>0&&(
             <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
               <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
@@ -373,7 +344,6 @@ function App() {
             </div>
           )}
 
-          {/* History */}
           {history.length>0&&(
             <div style={{padding:"14px 18px"}}>
               <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
@@ -386,7 +356,7 @@ function App() {
                     <div style={{width:6,height:6,borderRadius:"50%",background:"#1e72b8",marginTop:4,flexShrink:0}}/>
                     <div>
                       <div style={{fontSize:12,fontWeight:600,color:"#1f2937",overflow:"hidden",
-                        textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220}}>{h.location}</div>
+                        textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:210}}>{h.location}</div>
                       <div style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>
                         {h.time.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
                       </div>
@@ -398,19 +368,18 @@ function App() {
           )}
         </div>
 
-        {/* REPORT PANEL */}
         <div style={{overflowY:"auto",background:"#f1f4f8"}}>
           {!report&&!loading?(
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
               height:"100%",gap:16,padding:40,textAlign:"center"}}>
-              <div style={{width:68,height:68,borderRadius:"50%",border:"2px solid #e5e7eb",
-                color:"#d1d5db",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>◈</div>
+              <div style={{width:68,height:68,borderRadius:"50%",border:"2px solid #e5e7eb",color:"#d1d5db",
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>◈</div>
               <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:"#1f2937"}}>No Location Selected</div>
               <div style={{fontSize:13,color:"#6b7280",maxWidth:300,lineHeight:1.7}}>
                 Enter an address or coordinates, select your intelligence domains, and generate a full site report.
               </div>
               <div style={{display:"flex",gap:20,marginTop:8}}>
-                {["Enter location","Add API key","Generate"].map((s,i)=>(
+                {["Enter location","Select domains","Generate"].map((s,i)=>(
                   <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,maxWidth:80}}>
                     <div style={{width:28,height:28,borderRadius:"50%",background:"#0f2d52",color:"#fff",
                       fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",
@@ -442,31 +411,26 @@ function App() {
                   )}
                 </div>
               </div>
-
               {report.executive_summary&&(
                 <div style={{background:"#0f2d52",borderRadius:12,padding:"20px 24px",marginBottom:22,
                   position:"relative",overflow:"hidden",animation:"fadeIn 0.5s ease"}}>
                   <div style={{position:"absolute",top:-24,right:-24,width:100,height:100,borderRadius:"50%",
                     background:"rgba(30,114,184,0.25)"}}/>
                   <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
-                    color:"rgba(255,255,255,0.45)",fontFamily:"'DM Mono',monospace",marginBottom:10}}>
-                    Executive Summary
-                  </div>
+                    color:"rgba(255,255,255,0.45)",fontFamily:"'DM Mono',monospace",marginBottom:10}}>Executive Summary</div>
                   <div style={{fontSize:13.5,color:"rgba(255,255,255,0.88)",lineHeight:1.8,position:"relative"}}>
                     {report.executive_summary}
                   </div>
                 </div>
               )}
-
               <div style={{display:"flex",flexDirection:"column",gap:14}}>
                 {(report.sections||[]).map((sec,i)=>(
                   <DomainCard key={sec.domain} section={sec} index={i}/>
                 ))}
               </div>
-
               <div style={{marginTop:22,padding:"12px 16px",background:"#fff",border:"1px solid #e5e7eb",
                 borderRadius:8,fontSize:10.5,color:"#9ca3af",lineHeight:1.6}}>
-                <strong style={{color:"#6b7280"}}>Data Notice:</strong> This report is synthesised from Claude AI
+                <strong style={{color:"#6b7280"}}>Data Notice:</strong> This report is synthesised from Ferny AI
                 training knowledge and publicly available information. It is a preliminary intelligence briefing only.
                 Verify all figures against authoritative sources before investment or planning decisions.
               </div>
