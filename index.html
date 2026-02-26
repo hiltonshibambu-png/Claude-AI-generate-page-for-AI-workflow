@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Site Intelligence Engine</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<!-- React + Babel (no build step needed) -->
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;overflow:hidden}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#f1f4f8}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useCallback } = React;
+
+// ── DOMAIN CONFIG ─────────────────────────────────────────────────────────────
+const DOMAINS = [
+  { id:"geographic",   label:"Geographic Overview",              icon:"◈", color:"#0369a1", bg:"#e0f2fe", num:"01" },
+  { id:"market",       label:"Market Landscape",                 icon:"◎", color:"#7c3aed", bg:"#ede9fe", num:"02" },
+  { id:"competitor",   label:"Competitor Mapping",               icon:"◉", color:"#b45309", bg:"#fef3c7", num:"03" },
+  { id:"demographics", label:"Demographic & Economic Profiling", icon:"◍", color:"#065f46", bg:"#d1fae5", num:"04" },
+  { id:"feasibility",  label:"Development Feasibility Context",  icon:"◐", color:"#9f1239", bg:"#ffe4e6", num:"05" },
+];
+const DMAP = Object.fromEntries(DOMAINS.map(d => [d.id, d]));
+
+function buildPrompt(location, scopes) {
+  const desc = {
+    geographic:   "Geographic Overview — site description, land use classification, physical environment, terrain, connectivity, proximity to transport nodes and CBD",
+    market:       "Market Landscape — local economic conditions, commercial property market, sector activity, retail and office dynamics, growth signals, recent investment activity",
+    competitor:   "Competitor Mapping — nearby competing businesses and land uses, market saturation, competitive white space, proximity analysis by distance band",
+    demographics: "Demographic & Economic Profiling — population size and composition, age cohorts, household income, employment industries, dominant consumer segments, spending capacity",
+    feasibility:  "Development Feasibility Context — zoning classification and permitted uses, planning overlays, infrastructure capacity, development risk indicators, recent comparable approvals",
+  };
+  return `You are a senior site and market intelligence analyst. Produce a professional Site & Market Intelligence Report for:
+
+LOCATION: ${location}
+
+Use your knowledge of this area and publicly available information (demographic data, planning frameworks, market intelligence, geographic context) to synthesise a rigorous briefing.
+
+Selected domains to cover:
+${scopes.map((s,i) => `${i+1}. ${desc[s]}`).join("\n")}
+
+Return ONLY a valid JSON object — no markdown fencing, no preamble — matching this exact schema:
+{
+  "location_confirmed": "Full resolved place name / address",
+  "coordinates_approx": "Approx lat, lng",
+  "report_date": "Month Year",
+  "executive_summary": "3–4 sentence synthesis of the most critical cross-domain findings and overall site verdict",
+  "sections": [
+    {
+      "domain": "geographic|market|competitor|demographics|feasibility",
+      "headline": "Single punchy insight headline, max 12 words",
+      "narrative": "180–260 word professional narrative with specific local context, factual grounding, and analyst interpretation",
+      "key_points": ["Up to 6 concise data points or insights"],
+      "confidence": 0.85,
+      "limitations": "One sentence on data gaps or caveats"
+    }
+  ]
+}
+Only include sections for the selected domains. Be specific and factual. Note uncertainty in limitations.`;
+}
+
+// ── COMPONENTS ────────────────────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+      style={{animation:"spin 0.8s linear infinite",display:"block"}}>
+      <path d="M21 12a9 9 0 11-6.219-8.56" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function ConfidenceBar({ value }) {
+  const pct = Math.round((value||0.75)*100);
+  const col = pct>=80?"#16a34a":pct>=60?"#d97706":"#dc2626";
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+      <span style={{fontSize:9,color:"#9ca3af",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",textTransform:"uppercase"}}>Confidence</span>
+      <div style={{width:56,height:3,background:"#e5e7eb",borderRadius:2,overflow:"hidden"}}>
+        <div style={{width:`${pct}%`,height:"100%",background:col,borderRadius:2,transition:"width 0.6s ease"}}/>
+      </div>
+      <span style={{fontSize:9,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>{pct}%</span>
+    </div>
+  );
+}
+
+function DomainCard({ section, index }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const cfg = DMAP[section.domain] || DOMAINS[0];
+  return (
+    <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:12,overflow:"hidden",
+      boxShadow:"0 1px 4px rgba(0,0,0,0.06)",animation:`slideUp 0.4s ease both`,animationDelay:`${index*80}ms`}}>
+      <div onClick={()=>setCollapsed(!collapsed)} style={{padding:"14px 20px",display:"flex",alignItems:"center",
+        gap:12,borderBottom:collapsed?"none":"1px solid #f3f4f6",cursor:"pointer",background:collapsed?"#fafafa":"#fff"}}>
+        <div style={{width:36,height:36,borderRadius:8,background:cfg.bg,color:cfg.color,
+          display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{cfg.icon}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:cfg.color,
+            fontFamily:"'DM Mono',monospace",marginBottom:2}}>Domain {cfg.num}</div>
+          <div style={{fontSize:14,fontWeight:700,color:"#0f2d52",lineHeight:1.2}}>{cfg.label}</div>
+        </div>
+        <ConfidenceBar value={section.confidence}/>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"
+          style={{flexShrink:0,transform:collapsed?"rotate(-90deg)":"none",transition:"transform 0.2s"}}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+      {!collapsed && (
+        <div style={{padding:"18px 20px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#0f2d52",marginBottom:10,lineHeight:1.4}}>{section.headline}</div>
+          <div style={{fontSize:12.5,color:"#4b5563",lineHeight:1.85,marginBottom:14}}>{section.narrative}</div>
+          {section.key_points?.length>0 && (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:12}}>
+              {section.key_points.slice(0,6).map((kp,i) => (
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:7,padding:"7px 10px",
+                  background:"#f9fafb",borderRadius:6,fontSize:11.5,color:"#4b5563",lineHeight:1.45}}>
+                  <div style={{width:5,height:5,borderRadius:"50%",background:cfg.color,flexShrink:0,marginTop:4}}/>
+                  {kp}
+                </div>
+              ))}
+            </div>
+          )}
+          {section.limitations && (
+            <div style={{padding:"9px 12px",background:"#fffbeb",borderRadius:6,
+              border:"1px solid rgba(146,64,14,0.15)",fontSize:11,color:"#92400e",
+              display:"flex",gap:7,alignItems:"flex-start",lineHeight:1.5}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                style={{flexShrink:0,marginTop:1}}>
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {section.limitations}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgressStep({ label, status }) {
+  const map = {
+    pending:{bg:"#f3f4f6",text:"#9ca3af",icon:"○"},
+    active: {bg:"#eff6ff",text:"#2563eb",icon:"↻"},
+    done:   {bg:"#f0fdf4",text:"#16a34a",icon:"✓"},
+    error:  {bg:"#fef2f2",text:"#dc2626",icon:"✕"},
+  };
+  const c = map[status]||map.pending;
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:6,
+      background:c.bg,color:c.text,fontSize:12,fontWeight:500,transition:"all 0.2s"}}>
+      <span style={{width:18,height:18,borderRadius:"50%",background:c.text,color:"#fff",display:"flex",
+        alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,
+        animation:status==="active"?"spin 1s linear infinite":"none"}}>{c.icon}</span>
+      {label}
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+function App() {
+  const [address,  setAddress]  = useState("");
+  const [lat,      setLat]      = useState("");
+  const [lng,      setLng]      = useState("");
+  const [apiKey,   setApiKey]   = useState("");
+  const [showKey,  setShowKey]  = useState(false);
+  const [scopes,   setScopes]   = useState(DOMAINS.map(d=>d.id));
+  const [report,   setReport]   = useState(null);
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [progress, setProgress] = useState([]);
+  const [history,  setHistory]  = useState([]);
+
+  const toggleScope = id => setScopes(p => p.includes(id)?p.filter(s=>s!==id):[...p,id]);
+  const delay = ms => new Promise(r=>setTimeout(r,ms));
+
+  async function generate() {
+    const location = address.trim()||(lat&&lng?`${lat.trim()}, ${lng.trim()}`:"");
+    if (!location)    { setError("Please enter an address or coordinates."); return; }
+    if (!apiKey.trim()){ setError("Please enter your Claude API key."); return; }
+    if (!scopes.length){ setError("Select at least one intelligence domain."); return; }
+
+    setError(""); setReport(null); setLoading(true);
+    setProgress([
+      {id:"loc",   label:"Resolving location",      status:"active"},
+      {id:"ctx",   label:"Assembling site context",  status:"pending"},
+      {id:"ai",    label:"Claude AI synthesising",   status:"pending"},
+      {id:"render",label:"Building report",          status:"pending"},
+    ]);
+
+    try {
+      await delay(500);
+      setProgress(p=>p.map(s=>s.id==="loc"?{...s,status:"done"}:s.id==="ctx"?{...s,status:"active"}:s));
+      await delay(400);
+      setProgress(p=>p.map(s=>s.id==="ctx"?{...s,status:"done"}:s.id==="ai"?{...s,status:"active"}:s));
+
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key":apiKey.trim(),
+          "anthropic-version":"2023-06-01",
+          "anthropic-dangerous-request-header":"allowBrowserAccess"
+        },
+        body:JSON.stringify({
+          model:"claude-opus-4-6",
+          max_tokens:4096,
+          messages:[{role:"user",content:buildPrompt(location,scopes)}]
+        }),
+      });
+
+      if (!res.ok){
+        const e = await res.json().catch(()=>({}));
+        throw new Error(e?.error?.message||`API error ${res.status}`);
+      }
+
+      const result = await res.json();
+      const raw = result.content?.[0]?.text||"";
+      const data = JSON.parse(raw.replace(/^```json\s*/i,"").replace(/```\s*$/,"").trim());
+
+      setProgress(p=>p.map(s=>s.id==="ai"?{...s,status:"done"}:s.id==="render"?{...s,status:"active"}:s));
+      await delay(300);
+      setProgress(p=>p.map(s=>s.id==="render"?{...s,status:"done"}:s));
+      await delay(200);
+
+      setReport(data);
+      setHistory(p=>[{location,data,time:new Date()},...p].slice(0,5));
+    } catch(e) {
+      setProgress(p=>p.map(s=>["ai","render"].includes(s.id)?{...s,status:"error"}:s));
+      setError(e.message||"Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inp = {
+    width:"100%",padding:"8px 11px",border:"1.5px solid #e5e7eb",borderRadius:7,
+    fontFamily:"'DM Sans',sans-serif",fontSize:12.5,color:"#1f2937",background:"#fff",outline:"none",
+  };
+
+  return (
+    <div style={{display:"grid",gridTemplateRows:"52px 1fr",height:"100vh",
+      fontFamily:"'DM Sans',sans-serif",background:"#f1f4f8",overflow:"hidden"}}>
+
+      {/* TOPBAR */}
+      <div style={{background:"#0f2d52",display:"flex",alignItems:"center",gap:12,padding:"0 22px",
+        position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 55%,rgba(30,114,184,0.25))"}}/>
+        <div style={{width:28,height:28,background:"#1e72b8",borderRadius:6,display:"flex",
+          alignItems:"center",justifyContent:"center",fontSize:14,zIndex:1}}>◈</div>
+        <span style={{fontFamily:"'DM Serif Display',serif",fontSize:17,color:"#fff",fontWeight:400,zIndex:1}}>
+          Site Intelligence Engine
+        </span>
+        <span style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.45)",letterSpacing:"0.1em",
+          textTransform:"uppercase",fontFamily:"'DM Mono',monospace",zIndex:1}}>Powered by Claude AI</span>
+        <span style={{background:"rgba(30,114,184,0.35)",border:"1px solid rgba(30,114,184,0.55)",
+          color:"#93c5fd",fontSize:9,fontWeight:600,letterSpacing:"0.1em",
+          padding:"2px 8px",borderRadius:20,fontFamily:"'DM Mono',monospace",zIndex:1}}>MVP 1.0</span>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"330px 1fr",overflow:"hidden"}}>
+
+        {/* SIDEBAR */}
+        <div style={{background:"#fff",borderRight:"1px solid #e5e7eb",
+          display:"flex",flexDirection:"column",overflowY:"auto"}}>
+
+          {/* Location */}
+          <div style={{padding:"18px 18px 14px",borderBottom:"1px solid #f3f4f6"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+              color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:12}}>Location</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <input value={address} onChange={e=>setAddress(e.target.value)}
+                placeholder="Address or place name…"
+                onKeyDown={e=>e.key==="Enter"&&generate()} style={inp}/>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{flex:1,height:1,background:"#f3f4f6"}}/>
+                <span style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>or</span>
+                <div style={{flex:1,height:1,background:"#f3f4f6"}}/>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={lat} onChange={e=>setLat(e.target.value)} placeholder="Latitude" style={{...inp,flex:1}}/>
+                <input value={lng} onChange={e=>setLng(e.target.value)} placeholder="Longitude" style={{...inp,flex:1}}/>
+              </div>
+            </div>
+          </div>
+
+          {/* API Key */}
+          <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+              color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:10}}>Claude API Key</div>
+            <div style={{position:"relative"}}>
+              <input type={showKey?"text":"password"} value={apiKey} onChange={e=>setApiKey(e.target.value)}
+                placeholder="sk-ant-api03-…"
+                style={{...inp,paddingRight:52,fontFamily:"'DM Mono',monospace",fontSize:11}}/>
+              <button onClick={()=>setShowKey(!showKey)} style={{position:"absolute",right:8,top:"50%",
+                transform:"translateY(-50%)",background:"none",border:"none",fontSize:11,fontWeight:600,
+                color:"#1e72b8",cursor:"pointer"}}>
+                {showKey?"Hide":"Show"}
+              </button>
+            </div>
+          </div>
+
+          {/* Domains */}
+          <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+              color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:10}}>Report Domains</div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {DOMAINS.map(d=>{
+                const on=scopes.includes(d.id);
+                return (
+                  <div key={d.id} onClick={()=>toggleScope(d.id)} style={{
+                    display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:7,
+                    cursor:"pointer",userSelect:"none",
+                    border:`1.5px solid ${on?d.color:"#e5e7eb"}`,
+                    background:on?d.bg:"#fafafa",transition:"all 0.15s"}}>
+                    <div style={{width:16,height:16,borderRadius:4,
+                      border:`2px solid ${on?d.color:"#d1d5db"}`,background:on?d.color:"transparent",
+                      display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {on&&<span style={{color:"#fff",fontSize:9,fontWeight:800}}>✓</span>}
+                    </div>
+                    <span style={{fontSize:12,fontWeight:500,color:on?d.color:"#6b7280",flex:1}}>{d.label}</span>
+                    <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",color:on?d.color:"#9ca3af"}}>{d.num}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Generate */}
+          <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
+            <button onClick={generate} disabled={loading} style={{
+              width:"100%",padding:"11px 16px",
+              background:loading?"#6b7280":"#0f2d52",
+              color:"#fff",border:"none",borderRadius:8,
+              fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:600,
+              cursor:loading?"not-allowed":"pointer",
+              display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+              boxShadow:loading?"none":"0 2px 8px rgba(15,45,82,0.3)"}}>
+              {loading?<Spinner/>:(
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+              {loading?"Generating…":"Generate Intelligence Report"}
+            </button>
+            {error&&(
+              <div style={{marginTop:10,padding:"9px 12px",background:"#fef2f2",
+                border:"1px solid rgba(220,38,38,0.2)",borderRadius:7,
+                fontSize:12,color:"#991b1b",lineHeight:1.5}}>{error}</div>
+            )}
+          </div>
+
+          {/* Progress */}
+          {progress.length>0&&(
+            <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
+              <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+                color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:10}}>Progress</div>
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                {progress.map(s=><ProgressStep key={s.id} label={s.label} status={s.status}/>)}
+              </div>
+            </div>
+          )}
+
+          {/* History */}
+          {history.length>0&&(
+            <div style={{padding:"14px 18px"}}>
+              <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+                color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:10}}>Recent Reports</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {history.map((h,i)=>(
+                  <div key={i} onClick={()=>setReport(h.data)} style={{
+                    display:"flex",alignItems:"flex-start",gap:9,padding:"9px 10px",
+                    borderRadius:7,cursor:"pointer",border:"1px solid #f3f4f6",background:"#fafafa"}}>
+                    <div style={{width:6,height:6,borderRadius:"50%",background:"#1e72b8",marginTop:4,flexShrink:0}}/>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:"#1f2937",overflow:"hidden",
+                        textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220}}>{h.location}</div>
+                      <div style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>
+                        {h.time.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* REPORT PANEL */}
+        <div style={{overflowY:"auto",background:"#f1f4f8"}}>
+          {!report&&!loading?(
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              height:"100%",gap:16,padding:40,textAlign:"center"}}>
+              <div style={{width:68,height:68,borderRadius:"50%",border:"2px solid #e5e7eb",
+                color:"#d1d5db",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>◈</div>
+              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:"#1f2937"}}>No Location Selected</div>
+              <div style={{fontSize:13,color:"#6b7280",maxWidth:300,lineHeight:1.7}}>
+                Enter an address or coordinates, select your intelligence domains, and generate a full site report.
+              </div>
+              <div style={{display:"flex",gap:20,marginTop:8}}>
+                {["Enter location","Add API key","Generate"].map((s,i)=>(
+                  <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,maxWidth:80}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:"#0f2d52",color:"#fff",
+                      fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",
+                      fontFamily:"'DM Mono',monospace"}}>{i+1}</div>
+                    <span style={{fontSize:11,color:"#9ca3af",textAlign:"center"}}>{s}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ):report?(
+            <div style={{padding:"28px 32px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",
+                marginBottom:22,paddingBottom:20,borderBottom:"2px solid #0f2d52"}}>
+                <div>
+                  <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",
+                    color:"#1e72b8",fontFamily:"'DM Mono',monospace",marginBottom:6}}>
+                    Site & Market Intelligence Report
+                  </div>
+                  <div style={{fontFamily:"'DM Serif Display',serif",fontSize:24,color:"#0f2d52",lineHeight:1.25,maxWidth:460}}>
+                    {report.location_confirmed}
+                  </div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>{report.report_date}</div>
+                  {report.coordinates_approx&&(
+                    <div style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginTop:2}}>
+                      {report.coordinates_approx}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {report.executive_summary&&(
+                <div style={{background:"#0f2d52",borderRadius:12,padding:"20px 24px",marginBottom:22,
+                  position:"relative",overflow:"hidden",animation:"fadeIn 0.5s ease"}}>
+                  <div style={{position:"absolute",top:-24,right:-24,width:100,height:100,borderRadius:"50%",
+                    background:"rgba(30,114,184,0.25)"}}/>
+                  <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+                    color:"rgba(255,255,255,0.45)",fontFamily:"'DM Mono',monospace",marginBottom:10}}>
+                    Executive Summary
+                  </div>
+                  <div style={{fontSize:13.5,color:"rgba(255,255,255,0.88)",lineHeight:1.8,position:"relative"}}>
+                    {report.executive_summary}
+                  </div>
+                </div>
+              )}
+
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                {(report.sections||[]).map((sec,i)=>(
+                  <DomainCard key={sec.domain} section={sec} index={i}/>
+                ))}
+              </div>
+
+              <div style={{marginTop:22,padding:"12px 16px",background:"#fff",border:"1px solid #e5e7eb",
+                borderRadius:8,fontSize:10.5,color:"#9ca3af",lineHeight:1.6}}>
+                <strong style={{color:"#6b7280"}}>Data Notice:</strong> This report is synthesised from Claude AI
+                training knowledge and publicly available information. It is a preliminary intelligence briefing only.
+                Verify all figures against authoritative sources before investment or planning decisions.
+              </div>
+            </div>
+          ):null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
