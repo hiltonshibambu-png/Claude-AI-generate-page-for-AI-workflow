@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Site Intelligence Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  /* ── RESET & TOKENS ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:        #0d1117;
+    --ink-mid:    #3d4450;
+    --ink-light:  #6b7280;
+    --rule:       #e2e5ea;
+    --surface:    #f8f9fb;
+    --white:      #ffffff;
+    --navy:       #0f2d52;
+    --navy-mid:   #1a4a7a;
+    --accent:     #1e72b8;
+    --accent-lt:  #e8f2fb;
+    --gold:       #c8921a;
+    --gold-lt:    #fdf6e3;
+    --green:      #146b3a;
+    --green-lt:   #e9f5ee;
+    --red:        #b91c1c;
+    --red-lt:     #fef2f2;
+    --amber:      #92400e;
+    --amber-lt:   #fffbeb;
+
+    --font-display: 'DM Serif Display', Georgia, serif;
+    --font-body:    'DM Sans', system-ui, sans-serif;
+    --font-mono:    'DM Mono', monospace;
+
+    --shadow-sm:  0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md:  0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
+    --shadow-lg:  0 12px 40px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.06);
+
+    --r-sm: 6px;
+    --r-md: 10px;
+    --r-lg: 16px;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: var(--font-body);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── LAYOUT ─────────────────────────────────────────────────────────── */
+  .app {
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  /* ── HEADER ─────────────────────────────────────────────────────────── */
+  .app-header {
+    background: var(--navy);
+    padding: 0 28px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .app-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 60%, rgba(30,114,184,.3));
+    pointer-events: none;
+  }
+  .header-icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: var(--r-sm);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .header-icon svg { width: 18px; height: 18px; color: #fff; }
+  .header-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    color: #fff;
+    letter-spacing: .01em;
+  }
+  .header-sub {
+    font-size: 11px;
+    color: rgba(255,255,255,.55);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-left: auto;
+  }
+  .header-badge {
+    background: rgba(30,114,184,.4);
+    border: 1px solid rgba(30,114,184,.6);
+    color: #93c5fd;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-family: var(--font-mono);
+  }
+
+  /* ── MAIN PANEL ─────────────────────────────────────────────────────── */
+  .main {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    height: calc(100vh - 60px);
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ────────────────────────────────────────────────────────── */
+  .sidebar {
+    background: var(--white);
+    border-right: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sidebar-section {
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    margin-bottom: 12px;
+    font-family: var(--font-mono);
+  }
+
+  /* Input group */
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .field-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-mid);
+  }
+
+  input[type="text"] {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid var(--rule);
+    border-radius: var(--r-sm);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--white);
+    transition: border-color .15s, box-shadow .15s;
+    outline: none;
+  }
+  input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(30,114,184,.1);
+  }
+  input[type="text"]::placeholder { color: var(--ink-light); }
+
+  .input-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink-light);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .input-divider::before, .input-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--rule);
+  }
+
+  /* API Key field */
+  .api-key-wrap {
+    position: relative;
+  }
+  .api-key-wrap input {
+    padding-right: 80px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .05em;
+  }
+  .key-toggle {
+    position: absolute;
+    right: 8px; top: 50%;
+    transform: translateY(-50%);
+    background: none; border: none;
+    font-size: 11px; font-weight: 600;
+    color: var(--accent); cursor: pointer;
+    font-family: var(--font-body);
+    padding: 2px 6px;
+  }
+
+  /* Scope pills */
+  .scope-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .scope-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border: 1.5px solid var(--rule);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: all .15s;
+    user-select: none;
+    background: var(--white);
+  }
+  .scope-pill:hover { border-color: var(--accent); background: var(--accent-lt); }
+  .scope-pill.active {
+    border-color: var(--accent);
+    background: var(--accent-lt);
+  }
+  .scope-pill input { display: none; }
+  .scope-dot {
+    width: 14px; height: 14px;
+    border: 2px solid var(--rule);
+    border-radius: 3px;
+    flex-shrink: 0;
+    transition: all .15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .scope-pill.active .scope-dot {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .scope-pill.active .scope-dot::after {
+    content: '✓';
+    font-size: 9px;
+    color: #fff;
+    font-weight: 700;
+  }
+  .scope-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-mid);
+    line-height: 1.3;
+  }
+  .scope-pill.active .scope-text { color: var(--accent); }
+
+  /* Generate button */
+  .btn-generate {
+    width: 100%;
+    padding: 12px;
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: var(--r-sm);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background .15s, transform .1s, box-shadow .15s;
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-generate:hover { background: var(--navy-mid); box-shadow: var(--shadow-md); }
+  .btn-generate:active { transform: scale(.99); }
+  .btn-generate:disabled { background: var(--ink-light); cursor: not-allowed; transform: none; }
+  .btn-generate svg { width: 16px; height: 16px; }
+
+  /* Progress list */
+  .progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .progress-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-light);
+    transition: all .2s;
+  }
+  .progress-item.active {
+    background: var(--accent-lt);
+    color: var(--accent);
+  }
+  .progress-item.done {
+    background: var(--green-lt);
+    color: var(--green);
+  }
+  .progress-item.error {
+    background: var(--red-lt);
+    color: var(--red);
+  }
+
+  .progress-icon {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+    background: rgba(0,0,0,.06);
+  }
+  .progress-item.active .progress-icon {
+    background: var(--accent);
+    color: #fff;
+    animation: spin 1s linear infinite;
+  }
+  .progress-item.done .progress-icon {
+    background: var(--green);
+    color: #fff;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* History */
+  .history-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background .12s;
+    border: 1px solid transparent;
+  }
+  .history-item:hover { background: var(--surface); border-color: var(--rule); }
+  .history-loc {
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .history-time { font-size: 11px; color: var(--ink-light); }
+  .history-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  /* ── REPORT PANEL ───────────────────────────────────────────────────── */
+  .report-panel {
+    overflow-y: auto;
+    background: var(--surface);
+    position: relative;
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    padding: 40px;
+    text-align: center;
+  }
+  .empty-icon {
+    width: 72px; height: 72px;
+    border: 2px solid var(--rule);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-light);
+  }
+  .empty-icon svg { width: 32px; height: 32px; }
+  .empty-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .empty-sub {
+    font-size: 13px;
+    color: var(--ink-light);
+    max-width: 320px;
+    line-height: 1.7;
+  }
+  .empty-steps {
+    display: flex;
+    gap: 24px;
+    margin-top: 8px;
+  }
+  .empty-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--ink-light);
+    max-width: 90px;
+    text-align: center;
+  }
+  .empty-step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+  }
+
+  /* Report content */
+  .report-content { padding: 32px 36px; }
+
+  /* Report header */
+  .report-header {
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--navy);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .report-eyebrow {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    margin-bottom: 6px;
+  }
+  .report-title {
+    font-family: var(--font-display);
+    font-size: 28px;
+    color: var(--navy);
+    line-height: 1.2;
+    max-width: 460px;
+  }
+  .report-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .report-meta-item {
+    font-size: 11px;
+    color: var(--ink-light);
+    font-family: var(--font-mono);
+  }
+
+  /* Export bar */
+  .export-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding: 14px 16px;
+    background: var(--white);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-md);
+    align-items: center;
+    box-shadow: var(--shadow-sm);
+  }
+  .export-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-light);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    flex: 1;
+  }
+  .btn-export {
+    padding: 7px 14px;
+    border-radius: var(--r-sm);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all .15s;
+    border: 1.5px solid transparent;
+  }
+  .btn-export-pdf {
+    background: var(--navy);
+    color: #fff;
+    border-color: var(--navy);
+  }
+  .btn-export-pdf:hover { background: var(--navy-mid); }
+  .btn-export svg { width: 14px; height: 14px; }
+
+  /* Executive summary card */
+  .exec-summary {
+    background: var(--navy);
+    border-radius: var(--r-lg);
+    padding: 24px 28px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .exec-summary::before {
+    content: '';
+    position: absolute;
+    top: -30px; right: -30px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: rgba(30,114,184,.3);
+  }
+  .exec-summary::after {
+    content: '';
+    position: absolute;
+    bottom: -20px; right: 40px;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: rgba(30,114,184,.15);
+  }
+  .exec-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.55);
+    font-family: var(--font-mono);
+    margin-bottom: 10px;
+  }
+  .exec-text {
+    font-size: 14px;
+    color: rgba(255,255,255,.9);
+    line-height: 1.75;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Domain sections */
+  .domains-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .domain-card {
+    background: var(--white);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .2s;
+  }
+  .domain-card:hover { box-shadow: var(--shadow-md); }
+
+  .domain-header {
+    padding: 16px 22px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .domain-icon {
+    width: 36px; height: 36px;
+    border-radius: var(--r-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .domain-heading {
+    flex: 1;
+  }
+  .domain-num {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    margin-bottom: 2px;
+  }
+  .domain-title {
+    font-family: var(--font-display);
+    font-size: 17px;
+    color: var(--navy);
+    line-height: 1.2;
+  }
+
+  .domain-confidence {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+  }
+  .confidence-label {
+    font-size: 10px;
+    color: var(--ink-light);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .confidence-bar {
+    width: 64px;
+    height: 4px;
+    background: var(--rule);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .confidence-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--green);
+    transition: width .6s ease;
+  }
+
+  .domain-chevron {
+    color: var(--ink-light);
+    transition: transform .2s;
+    flex-shrink: 0;
+  }
+  .domain-card.collapsed .domain-chevron { transform: rotate(-90deg); }
+
+  .domain-body {
+    padding: 20px 22px;
+  }
+  .domain-card.collapsed .domain-body { display: none; }
+
+  .domain-headline {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+  .domain-narrative {
+    font-size: 13px;
+    color: var(--ink-mid);
+    line-height: 1.8;
+    margin-bottom: 16px;
+  }
+
+  /* Key points */
+  .key-points {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .key-point {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--surface);
+    border-radius: var(--r-sm);
+    font-size: 12px;
+    color: var(--ink-mid);
+    line-height: 1.4;
+  }
+  .key-point-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+
+  /* Limitations */
+  .limitations {
+    padding: 10px 12px;
+    background: var(--amber-lt);
+    border: 1px solid rgba(146,64,14,.15);
+    border-radius: var(--r-sm);
+    font-size: 11.5px;
+    color: var(--amber);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    line-height: 1.5;
+  }
+  .limitations svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+
+  /* Domain color themes */
+  .domain-geo    { --d-color: #0369a1; --d-bg: #e0f2fe; }
+  .domain-market { --d-color: #7c3aed; --d-bg: #ede9fe; }
+  .domain-comp   { --d-color: #b45309; --d-bg: #fef3c7; }
+  .domain-demo   { --d-color: #065f46; --d-bg: #d1fae5; }
+  .domain-dev    { --d-color: #9f1239; --d-bg: #ffe4e6; }
+
+  .domain-geo .domain-icon    { background: #e0f2fe; }
+  .domain-market .domain-icon { background: #ede9fe; }
+  .domain-comp .domain-icon   { background: #fef3c7; }
+  .domain-demo .domain-icon   { background: #d1fae5; }
+  .domain-dev .domain-icon    { background: #ffe4e6; }
+
+  .domain-geo .domain-num    { color: #0369a1; }
+  .domain-market .domain-num { color: #7c3aed; }
+  .domain-comp .domain-num   { color: #b45309; }
+  .domain-demo .domain-num   { color: #065f46; }
+  .domain-dev .domain-num    { color: #9f1239; }
+
+  .domain-geo .key-point-dot    { background: #0369a1; }
+  .domain-market .key-point-dot { background: #7c3aed; }
+  .domain-comp .key-point-dot   { background: #b45309; }
+  .domain-demo .key-point-dot   { background: #065f46; }
+  .domain-dev .key-point-dot    { background: #9f1239; }
+
+  /* Streaming cursor */
+  .stream-cursor {
+    display: inline-block;
+    width: 2px; height: 1em;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink .7s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Error state */
+  .error-card {
+    background: var(--red-lt);
+    border: 1px solid rgba(185,28,28,.2);
+    border-radius: var(--r-md);
+    padding: 20px 24px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .error-card svg { color: var(--red); flex-shrink: 0; margin-top: 2px; }
+  .error-title { font-size: 14px; font-weight: 600; color: var(--red); margin-bottom: 4px; }
+  .error-msg { font-size: 13px; color: #7f1d1d; line-height: 1.6; }
+
+  /* Loading pulse */
+  @keyframes pulse { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+  .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #c0c7d0; }
+
+  /* Disclaimer */
+  .disclaimer {
+    margin-top: 28px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-md);
+    font-size: 11px;
+    color: var(--ink-light);
+    line-height: 1.6;
+  }
+  .disclaimer strong { color: var(--ink-mid); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        <path d="M11 8v6M8 11h6"/>
+      </svg>
+    </div>
+    <span class="header-title">Site Intelligence Engine</span>
+    <span class="header-sub">Powered by Claude AI</span>
+    <span class="header-badge">MVP 1.0</span>
+  </header>
+
+  <div class="main">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+      <!-- Location input -->
+      <div class="sidebar-section">
+        <div class="section-label">Location</div>
+        <div class="input-group">
+          <div class="field-wrap">
+            <div class="field-label">Address or Place Name</div>
+            <input type="text" id="addressInput" placeholder="e.g. 123 George St, Sydney NSW" />
+          </div>
+          <div class="input-divider">or</div>
+          <div class="input-row">
+            <div class="field-wrap">
+              <div class="field-label">Latitude</div>
+              <input type="text" id="latInput" placeholder="-33.8688" />
+            </div>
+            <div class="field-wrap">
+              <div class="field-label">Longitude</div>
+              <input type="text" id="lngInput" placeholder="151.2093" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Key -->
+      <div class="sidebar-section">
+        <div class="section-label">Claude API Key</div>
+        <div class="api-key-wrap">
+          <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-…" />
+          <button class="key-toggle" onclick="toggleKey()">Show</button>
+        </div>
+      </div>
+
+      <!-- Report scope -->
+      <div class="sidebar-section">
+        <div class="section-label">Report Scope</div>
+        <div class="scope-grid" id="scopeGrid">
+          <label class="scope-pill active">
+            <input type="checkbox" checked value="geographic" />
+            <span class="scope-dot"></span>
+            <span class="scope-text">Geographic<br>Overview</span>
+          </label>
+          <label class="scope-pill active">
+            <input type="checkbox" checked value="market" />
+            <span class="scope-dot"></span>
+            <span class="scope-text">Market<br>Landscape</span>
+          </label>
+          <label class="scope-pill active">
+            <input type="checkbox" checked value="competitor" />
+            <span class="scope-dot"></span>
+            <span class="scope-text">Competitor<br>Mapping</span>
+          </label>
+          <label class="scope-pill active">
+            <input type="checkbox" checked value="demographics" />
+            <span class="scope-dot"></span>
+            <span class="scope-text">Demographics<br>& Economics</span>
+          </label>
+          <label class="scope-pill active" style="grid-column: span 2">
+            <input type="checkbox" checked value="feasibility" />
+            <span class="scope-dot"></span>
+            <span class="scope-text">Development Feasibility Context</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Generate button -->
+      <div class="sidebar-section">
+        <button class="btn-generate" id="generateBtn" onclick="generateReport()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          Generate Intelligence Report
+        </button>
+      </div>
+
+      <!-- Progress -->
+      <div class="sidebar-section" id="progressSection" style="display:none">
+        <div class="section-label">Analysis Progress</div>
+        <div class="progress-list" id="progressList"></div>
+      </div>
+
+      <!-- History -->
+      <div class="sidebar-section" id="historySection" style="display:none">
+        <div class="section-label">Recent Reports</div>
+        <div id="historyList"></div>
+      </div>
+
+    </aside>
+
+    <!-- REPORT PANEL -->
+    <main class="report-panel" id="reportPanel">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+            <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <div class="empty-title">No Location Selected</div>
+        <div class="empty-sub">Enter an address or coordinates, then generate a full site and market intelligence report powered by Claude AI.</div>
+        <div class="empty-steps">
+          <div class="empty-step">
+            <div class="empty-step-num">1</div>
+            Enter location
+          </div>
+          <div class="empty-step">
+            <div class="empty-step-num">2</div>
+            Add API key
+          </div>
+          <div class="empty-step">
+            <div class="empty-step-num">3</div>
+            Generate report
+          </div>
+        </div>
+      </div>
+      <div id="reportOutput" style="display:none"></div>
+    </main>
+
+  </div>
+</div>
+
+<script>
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let history = [];
+let currentReport = null;
+let isGenerating = false;
+
+// ── SCOPE PILLS ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.scope-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    pill.classList.toggle('active');
+    pill.querySelector('input').checked = pill.classList.contains('active');
+  });
+});
+
+// ── API KEY TOGGLE ────────────────────────────────────────────────────────────
+function toggleKey() {
+  const inp = document.getElementById('apiKeyInput');
+  const btn = inp.nextElementSibling;
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
+  else { inp.type = 'password'; btn.textContent = 'Show'; }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getSelectedScopes() {
+  return [...document.querySelectorAll('.scope-pill.active input')].map(i => i.value);
+}
+
+function getLocation() {
+  const addr = document.getElementById('addressInput').value.trim();
+  const lat  = document.getElementById('latInput').value.trim();
+  const lng  = document.getElementById('lngInput').value.trim();
+  return { addr, lat, lng };
+}
+
+function setProgress(steps) {
+  const section = document.getElementById('progressSection');
+  const list    = document.getElementById('progressList');
+  section.style.display = 'block';
+  list.innerHTML = steps.map(s => `
+    <div class="progress-item ${s.status}" id="prog-${s.id}">
+      <div class="progress-icon">${s.status === 'active' ? '↻' : s.status === 'done' ? '✓' : s.status === 'error' ? '✕' : '○'}</div>
+      ${s.label}
+    </div>`).join('');
+}
+
+function updateProgress(id, status) {
+  const el = document.getElementById(`prog-${id}`);
+  if (!el) return;
+  el.className = `progress-item ${status}`;
+  const icon = el.querySelector('.progress-icon');
+  icon.textContent = status === 'active' ? '↻' : status === 'done' ? '✓' : status === 'error' ? '✕' : '○';
+}
+
+// ── PROMPT BUILDER ────────────────────────────────────────────────────────────
+function buildPrompt(location, scopes) {
+  const scopeMap = {
+    geographic:   'Geographic Overview (site description, land use, physical environment, connectivity, proximity to key infrastructure)',
+    market:       'Market Landscape (local economic conditions, sector activity, commercial property market, growth signals, recent investment)',
+    competitor:   'Competitor Mapping (nearby competing businesses and uses, market saturation, competitive white space, proximity analysis)',
+    demographics: 'Demographic & Economic Profiling (population size and composition, age profile, income levels, employment profile, dominant consumer segments, spending capacity)',
+    feasibility:  'Development Feasibility Context (zoning and land use controls, planning constraints, infrastructure readiness, development risk indicators, comparable recent developments)'
+  };
+
+  const selectedSections = scopes.map(s => scopeMap[s]).filter(Boolean);
+
+  return `You are a professional site and market intelligence analyst. A user has requested a comprehensive Site Intelligence Report for the following location:
+
+LOCATION: ${location}
+
+Using your knowledge of this area and publicly available information (geographic data, demographic statistics, market indicators, planning frameworks, competitor landscape), produce a detailed Site & Market Intelligence Report.
+
+The report must cover ONLY the following sections (based on user selection):
+${selectedSections.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+Return your response as a valid JSON object matching EXACTLY this structure:
+{
+  "location_confirmed": "Full resolved location name / address",
+  "coordinates_approx": "Approximate lat, lng if known",
+  "report_date": "Month Year",
+  "executive_summary": "3–4 sentence executive summary synthesising the key finding across all selected domains",
+  "sections": [
+    {
+      "domain": "geographic|market|competitor|demographics|feasibility",
+      "headline": "One punchy headline insight for this domain (max 12 words)",
+      "narrative": "Detailed narrative of 180–260 words covering the domain thoroughly with specific facts, local context, and professional interpretation",
+      "key_points": ["Concise data point or insight", "...up to 6 key points"],
+      "confidence": 0.85,
+      "limitations": "One sentence noting any data limitations or caveats for this section"
+    }
+  ]
+}
+
+Include only the selected domains in the sections array. Be specific, factual, and grounded in real knowledge of the location. Where specific data is unavailable, provide indicative ranges or contextual comparisons. Do not invent precise figures; note uncertainty appropriately in the limitations field. Return ONLY valid JSON with no markdown fencing, no preamble.`;
+}
+
+// ── DOMAIN CONFIG ─────────────────────────────────────────────────────────────
+const domainConfig = {
+  geographic:   { label: 'Geographic Overview',              icon: '🗺️', cls: 'domain-geo',    num: '01' },
+  market:       { label: 'Market Landscape',                 icon: '📈', cls: 'domain-market', num: '02' },
+  competitor:   { label: 'Competitor Mapping',               icon: '🏪', cls: 'domain-comp',   num: '03' },
+  demographics: { label: 'Demographic & Economic Profiling', icon: '👥', cls: 'domain-demo',   num: '04' },
+  feasibility:  { label: 'Development Feasibility Context',  icon: '🏗️', cls: 'domain-dev',    num: '05' }
+};
+
+// ── RENDER REPORT ─────────────────────────────────────────────────────────────
+function renderReport(data, location) {
+  currentReport = data;
+
+  const date = new Date().toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' });
+
+  let html = `
+    <div class="report-content" id="reportInner">
+      <div class="report-header">
+        <div>
+          <div class="report-eyebrow">Site & Market Intelligence Report</div>
+          <div class="report-title">${escHtml(data.location_confirmed || location)}</div>
+        </div>
+        <div class="report-meta">
+          <div class="report-meta-item">${escHtml(data.report_date || '')}</div>
+          <div class="report-meta-item">Generated ${date}</div>
+          ${data.coordinates_approx ? `<div class="report-meta-item">${escHtml(data.coordinates_approx)}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="export-bar">
+        <span class="export-label">Export Report</span>
+        <button class="btn-export btn-export-pdf" onclick="exportPDF()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Download PDF
+        </button>
+      </div>
+
+      ${data.executive_summary ? `
+      <div class="exec-summary">
+        <div class="exec-label">Executive Summary</div>
+        <div class="exec-text">${escHtml(data.executive_summary)}</div>
+      </div>` : ''}
+
+      <div class="domains-grid">
+        ${(data.sections || []).map(sec => renderDomainCard(sec)).join('')}
+      </div>
+
+      <div class="disclaimer">
+        <strong>Data Notice:</strong> This report is synthesised from Claude AI's training knowledge and publicly available information as of the model's knowledge cutoff. It is intended as a preliminary intelligence briefing only. Figures and assessments should be verified against authoritative sources before use in investment, planning, or development decisions.
+      </div>
+    </div>`;
+
+  document.getElementById('emptyState').style.display = 'none';
+  const out = document.getElementById('reportOutput');
+  out.style.display = 'block';
+  out.innerHTML = html;
+
+  // Animate cards in
+  document.querySelectorAll('.domain-card').forEach((card, i) => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(12px)';
+    setTimeout(() => {
+      card.style.transition = 'opacity .4s ease, transform .4s ease';
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, i * 80);
+  });
+
+  // Collapse toggle
+  document.querySelectorAll('.domain-header').forEach(h => {
+    h.addEventListener('click', () => h.closest('.domain-card').classList.toggle('collapsed'));
+  });
+}
+
+function renderDomainCard(sec) {
+  const cfg = domainConfig[sec.domain] || { label: sec.domain, icon: '📋', cls: 'domain-geo', num: '—' };
+  const conf = Math.round((sec.confidence || 0.75) * 100);
+  const confColor = conf >= 80 ? 'var(--green)' : conf >= 60 ? 'var(--gold)' : 'var(--red)';
+
+  const kps = (sec.key_points || []).slice(0, 6).map(kp =>
+    `<div class="key-point"><div class="key-point-dot"></div>${escHtml(kp)}</div>`
+  ).join('');
+
+  return `
+    <div class="domain-card ${cfg.cls}">
+      <div class="domain-header">
+        <div class="domain-icon">${cfg.icon}</div>
+        <div class="domain-heading">
+          <div class="domain-num">Domain ${cfg.num}</div>
+          <div class="domain-title">${cfg.label}</div>
+        </div>
+        <div class="domain-confidence">
+          <div class="confidence-label">Confidence</div>
+          <div class="confidence-bar">
+            <div class="confidence-fill" style="width:${conf}%; background:${confColor}"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink-light);font-family:var(--font-mono)">${conf}%</div>
+        </div>
+        <svg class="domain-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="domain-body">
+        <div class="domain-headline">${escHtml(sec.headline || '')}</div>
+        <div class="domain-narrative">${escHtml(sec.narrative || '')}</div>
+        ${kps ? `<div class="key-points">${kps}</div>` : ''}
+        ${sec.limitations ? `
+        <div class="limitations">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          ${escHtml(sec.limitations)}
+        </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── GENERATE ──────────────────────────────────────────────────────────────────
+async function generateReport() {
+  if (isGenerating) return;
+
+  const { addr, lat, lng } = getLocation();
+  const apiKey = document.getElementById('apiKeyInput').value.trim();
+  const scopes = getSelectedScopes();
+
+  // Validate
+  if (!addr && (!lat || !lng)) {
+    alert('Please enter an address or coordinates.');
+    return;
+  }
+  if (!apiKey) { alert('Please enter your Claude API key.'); return; }
+  if (scopes.length === 0) { alert('Please select at least one report domain.'); return; }
+
+  const location = addr || `${lat}, ${lng}`;
+  isGenerating = true;
+
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<svg class="loading-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
+
+  // Progress steps
+  const steps = [
+    { id: 'geocode',   label: 'Resolving location',         status: 'active' },
+    { id: 'context',   label: 'Assembling site context',    status: '' },
+    { id: 'ai',        label: 'Claude AI synthesising',     status: '' },
+    { id: 'render',    label: 'Building report',            status: '' },
+  ];
+  setProgress(steps);
+
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('reportOutput').style.display = 'none';
+
+  try {
+    await delay(600);
+    updateProgress('geocode', 'done');
+    updateProgress('context', 'active');
+    await delay(500);
+    updateProgress('context', 'done');
+    updateProgress('ai', 'active');
+
+    const prompt = buildPrompt(location, scopes);
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `API error ${response.status}`);
+    }
+
+    const result = await response.json();
+    const raw = result.content?.[0]?.text || '';
+
+    updateProgress('ai', 'done');
+    updateProgress('render', 'active');
+    await delay(300);
+
+    // Parse JSON — strip any accidental fencing
+    let data;
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+      data = JSON.parse(cleaned);
+    } catch (e) {
+      throw new Error('Could not parse AI response as JSON. The model may have returned unexpected content.');
+    }
+
+    updateProgress('render', 'done');
+    await delay(200);
+
+    renderReport(data, location);
+
+    // Save to history
+    history.unshift({ location, data, time: new Date() });
+    if (history.length > 5) history.pop();
+    renderHistory();
+
+  } catch (err) {
+    updateProgress('ai', 'error');
+    updateProgress('render', 'error');
+
+    document.getElementById('emptyState').style.display = 'none';
+    const out = document.getElementById('reportOutput');
+    out.style.display = 'block';
+    out.innerHTML = `
+      <div class="report-content">
+        <div class="error-card">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div>
+            <div class="error-title">Report Generation Failed</div>
+            <div class="error-msg">${escHtml(err.message)}<br><br>Please check your API key, network connection, and try again. If the error persists, the Claude API may be temporarily unavailable.</div>
+          </div>
+        </div>
+      </div>`;
+  } finally {
+    isGenerating = false;
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Generate Intelligence Report`;
+  }
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── HISTORY ───────────────────────────────────────────────────────────────────
+function renderHistory() {
+  if (history.length === 0) return;
+  const section = document.getElementById('historySection');
+  const list    = document.getElementById('historyList');
+  section.style.display = 'block';
+  list.innerHTML = history.map((h, i) => `
+    <div class="history-item" onclick="loadHistory(${i})">
+      <div class="history-dot"></div>
+      <div>
+        <div class="history-loc">${escHtml(h.location)}</div>
+        <div class="history-time">${h.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</div>
+      </div>
+    </div>`).join('');
+}
+
+function loadHistory(i) {
+  const h = history[i];
+  if (h) renderReport(h.data, h.location);
+}
+
+// ── PDF EXPORT ────────────────────────────────────────────────────────────────
+async function exportPDF() {
+  if (!currentReport) return;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const W = 210, margin = 18;
+  const contentW = W - margin * 2;
+  let y = 0;
+
+  function checkPage(needed = 10) {
+    if (y + needed > 270) { doc.addPage(); y = 20; }
+  }
+
+  // Cover strip
+  doc.setFillColor(15, 45, 82);
+  doc.rect(0, 0, W, 42, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(120, 160, 200);
+  doc.text('SITE & MARKET INTELLIGENCE REPORT', margin, 14);
+
+  doc.setFontSize(18);
+  doc.setTextColor(255, 255, 255);
+  const titleLines = doc.splitTextToSize(currentReport.location_confirmed || 'Location Report', contentW);
+  doc.text(titleLines, margin, 24);
+
+  doc.setFontSize(8);
+  doc.setTextColor(150, 180, 210);
+  doc.text(`${currentReport.report_date || ''}  ·  Generated ${new Date().toLocaleDateString('en-AU')}`, margin, 38);
+
+  y = 52;
+
+  // Executive summary
+  if (currentReport.executive_summary) {
+    doc.setFillColor(232, 242, 251);
+    const execLines = doc.splitTextToSize(currentReport.executive_summary, contentW - 12);
+    const execH = execLines.length * 5.5 + 14;
+    doc.roundedRect(margin, y, contentW, execH, 3, 3, 'F');
+
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 114, 184);
+    doc.text('EXECUTIVE SUMMARY', margin + 6, y + 8);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 40, 60);
+    doc.text(execLines, margin + 6, y + 14);
+    y += execH + 10;
+  }
+
+  // Sections
+  const domainColors = {
+    geographic:   [3, 105, 161],
+    market:       [124, 58, 237],
+    competitor:   [180, 83, 9],
+    demographics: [6, 95, 70],
+    feasibility:  [159, 18, 57]
+  };
+  const domainLabels = {
+    geographic:   'Geographic Overview',
+    market:       'Market Landscape',
+    competitor:   'Competitor Mapping',
+    demographics: 'Demographic & Economic Profiling',
+    feasibility:  'Development Feasibility Context'
+  };
+
+  for (const sec of (currentReport.sections || [])) {
+    checkPage(30);
+    const [r,g,b] = domainColors[sec.domain] || [30,114,184];
+
+    // Section header bar
+    doc.setFillColor(r, g, b);
+    doc.rect(margin, y, contentW, 9, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255,255,255);
+    doc.text((domainLabels[sec.domain] || sec.domain).toUpperCase(), margin + 4, y + 6);
+    y += 12;
+
+    // Headline
+    checkPage(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 45, 82);
+    const headLines = doc.splitTextToSize(sec.headline || '', contentW);
+    doc.text(headLines, margin, y);
+    y += headLines.length * 5.5 + 4;
+
+    // Narrative
+    checkPage(15);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(50, 60, 75);
+    const narr = doc.splitTextToSize(sec.narrative || '', contentW);
+    checkPage(narr.length * 4.5);
+    doc.text(narr, margin, y);
+    y += narr.length * 4.8 + 6;
+
+    // Key points
+    if (sec.key_points?.length) {
+      checkPage(10);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(r, g, b);
+      doc.text('KEY POINTS', margin, y);
+      y += 5;
+
+      for (const kp of sec.key_points.slice(0, 6)) {
+        checkPage(8);
+        const kpLines = doc.splitTextToSize('• ' + kp, contentW - 4);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(50, 60, 75);
+        doc.text(kpLines, margin + 2, y);
+        y += kpLines.length * 4.5 + 1;
+      }
+      y += 4;
+    }
+
+    // Limitations
+    if (sec.limitations) {
+      checkPage(10);
+      doc.setFillColor(255, 251, 235);
+      const limLines = doc.splitTextToSize('Note: ' + sec.limitations, contentW - 10);
+      doc.roundedRect(margin, y, contentW, limLines.length * 4.5 + 6, 2, 2, 'F');
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.setTextColor(146, 64, 14);
+      doc.text(limLines, margin + 4, y + 5);
+      y += limLines.length * 4.5 + 10;
+    }
+
+    y += 6;
+  }
+
+  // Disclaimer
+  checkPage(20);
+  doc.setDrawColor(220, 225, 230);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y, W - margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(120, 130, 140);
+  const disc = doc.splitTextToSize('This report is synthesised from Claude AI knowledge and publicly available information. It is intended as a preliminary intelligence briefing. All figures should be verified against authoritative sources before use in investment, planning, or development decisions.', contentW);
+  doc.text(disc, margin, y);
+
+  // Page numbers
+  const total = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(150, 155, 165);
+    doc.text(`Page ${i} of ${total}`, W - margin, 290, { align: 'right' });
+    doc.text('CONFIDENTIAL  ·  Site Intelligence Engine  ·  Powered by Claude AI', margin, 290);
+  }
+
+  const filename = `site-intelligence-${(currentReport.location_confirmed || 'report').replace(/[^a-z0-9]/gi,'_').toLowerCase()}.pdf`;
+  doc.save(filename);
+}
+</script>
+</body>
+</html>
