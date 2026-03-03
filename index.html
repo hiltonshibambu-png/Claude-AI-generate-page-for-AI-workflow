@@ -425,6 +425,7 @@ function App() {
               <input value={address} onChange={e=>setAddress(e.target.value)}
                 placeholder="Address or place name…"
                 onKeyDown={e=>e.key==="Enter"&&generate()} style={inp}/>
+              {/* COMMENTED OUT: lat/lng inputs — address only for now
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div style={{flex:1,height:1,background:"#f3f4f6"}}/>
                 <span style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>or</span>
@@ -434,6 +435,7 @@ function App() {
                 <input value={lat} onChange={e=>setLat(e.target.value)} placeholder="Latitude" style={{...inp,flex:1}}/>
                 <input value={lng} onChange={e=>setLng(e.target.value)} placeholder="Longitude" style={{...inp,flex:1}}/>
               </div>
+              */}
             </div>
           </div>
 
