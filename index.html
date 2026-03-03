@@ -125,7 +125,7 @@ function DomainCard({ section, index }) {
       {!collapsed && (
         <div style={{padding:"18px 20px"}}>
           <div style={{fontSize:13,fontWeight:700,color:"#0f2d52",marginBottom:10,lineHeight:1.4}}>{section.headline}</div>
-          <div style={{fontSize:12.5,color:"#4b5563",lineHeight:1.85,marginBottom:14}}>{section.narrative}</div>
+          <div style={{fontSize:12.5,color:"#4b5563",lineHeight:1.85,marginBottom:14,textAlign:"justify"}}>{section.narrative}</div>
           {section.key_points?.length>0 && (
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:12}}>
               {section.key_points.slice(0,6).map((kp,i) => (
@@ -209,7 +209,24 @@ function App() {
       };
       function checkPage(needed=10){if(y+needed>pageH-16){doc.addPage();y=margin;}}
       function wrapText(text,maxW,fs){doc.setFontSize(fs);return doc.splitTextToSize(String(text||""),maxW);}
-      // Header band
+      // Justified text renderer — spaces words evenly across full line width, last line left-aligned
+      function drawJustified(lines, x, startY, lineH, maxW) {
+        lines.forEach((line, li) => {
+          const isLast = li === lines.length - 1;
+          const words = line.trim().split(" ").filter(Boolean);
+          if (isLast || words.length <= 1) {
+            doc.text(line, x, startY + li * lineH);
+            return;
+          }
+          const totalWordW = words.reduce((sum, w) => sum + doc.getTextWidth(w), 0);
+          const gap = (maxW - totalWordW) / (words.length - 1);
+          let cx = x;
+          words.forEach((w, wi) => {
+            doc.text(w, cx, startY + li * lineH);
+            cx += doc.getTextWidth(w) + gap;
+          });
+        });
+      }
       doc.setFillColor(15,45,82);doc.rect(0,0,pageW,30,"F");
       doc.setFillColor(30,114,184);doc.rect(0,0,4,30,"F");
       doc.setFontSize(7);doc.setTextColor(150,185,220);doc.setFont("helvetica","normal");
@@ -233,7 +250,7 @@ function App() {
         doc.roundedRect(margin,y,contentW,sh,2,2,"FD");
         doc.setFillColor(30,114,184);doc.rect(margin,y,3,sh,"F");
         doc.setTextColor(20,40,70);doc.setFont("helvetica","normal");doc.setFontSize(9.5);
-        doc.text(sl,margin+7,y+7);y+=sh+10;
+        drawJustified(sl,margin+7,y+7,5.2,contentW-14);y+=sh+10;
       }
       // Sections
       (report.sections||[]).forEach((sec,idx)=>{
@@ -266,7 +283,7 @@ function App() {
         // Narrative
         checkPage(nl.length*5+5);
         doc.setTextColor(55,65,81);doc.setFontSize(9);doc.setFont("helvetica","normal");
-        doc.text(nl,margin,y);y+=nl.length*5+6;
+        drawJustified(nl,margin,y,5,contentW-8);y+=nl.length*5+6;
         // Key points
         if(kpl.length>0){
           checkPage(kpH+5);
@@ -634,7 +651,7 @@ function App() {
                     color:"rgba(255,255,255,0.45)",fontFamily:"'DM Mono',monospace",marginBottom:10}}>
                     Executive Summary
                   </div>
-                  <div style={{fontSize:13.5,color:"rgba(255,255,255,0.88)",lineHeight:1.8,position:"relative"}}>
+                  <div style={{fontSize:13.5,color:"rgba(255,255,255,0.88)",lineHeight:1.8,position:"relative",textAlign:"justify"}}>
                     {report.executive_summary}
                   </div>
                 </div>
