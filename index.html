@@ -413,10 +413,10 @@ function App() {
       fontFamily:"'DM Sans',sans-serif",background:"#f1f4f8",overflow:"hidden"}}>
 
       {/* TOPBAR */}
-      <div style={{background:"#0f2d52",display:"flex",alignItems:"center",gap:12,padding:"0 22px",
+      <div style={{background:"#0ba13b",display:"flex",alignItems:"center",gap:12,padding:"0 22px",
         position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 55%,rgba(30,114,184,0.25))"}}/>
-        <div style={{width:28,height:28,background:"#1e72b8",borderRadius:6,display:"flex",
+        <div style={{width:28,height:28,background:"#707070",borderRadius:6,display:"flex",
           alignItems:"center",justifyContent:"center",zIndex:1}}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="8" width="18" height="12" rx="2"/>
@@ -430,10 +430,10 @@ function App() {
         <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:17,color:"#fff",fontWeight:400,zIndex:1}}>
           Ferny Research Agent
         </span>
-        <span style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.45)",letterSpacing:"0.1em",
+        <span style={{marginLeft:"auto",fontSize:10,color:"rgba(0,0,0)",letterSpacing:"0.1em",
           textTransform:"uppercase",fontFamily:"'DM Mono',monospace",zIndex:1}}>Powered by Fernridge Solutions</span>
-        <span style={{background:"rgba(30,114,184,0.35)",border:"1px solid rgba(30,114,184,0.55)",
-          color:"#93c5fd",fontSize:9,fontWeight:600,letterSpacing:"0.1em",
+        <span style={{background:"rgba(112,112,112,0.99)",border:"1px solid rgba(112,112,112,0.55)",
+          color:"#ffffff",fontSize:9,fontWeight:600,letterSpacing:"0.1em",
           padding:"2px 8px",borderRadius:20,fontFamily:"'DM Mono',monospace",zIndex:1}}>MVP 1.0</span>
       </div>
 
@@ -521,7 +521,7 @@ function App() {
           <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
             <button onClick={generate} disabled={loading} style={{
               width:"100%",padding:"11px 16px",
-              background:loading?"#6b7280":"#0f2d52",
+              background:loading?"#6b7280":"#0ba13b",
               color:"#fff",border:"none",borderRadius:8,
               fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:600,
               cursor:loading?"not-allowed":"pointer",
@@ -593,14 +593,14 @@ function App() {
                   <path d="M12 2v2"/>
                 </svg>
               </div>
-              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:"#1f2937"}}>No Location Selected</div>
+              <div style={{fontFamily:"'DM Serif Display',Segoe UI",fontSize:22,color:"#1f2937"}}>No Location Selected</div>
               <div style={{fontSize:13,color:"#6b7280",maxWidth:300,lineHeight:1.7}}>
                 Enter an address or name (POI) of your site, select your intelligence domains, and generate a full site report.
               </div>
               <div style={{display:"flex",gap:20,marginTop:8}}>
                 {["Enter location","Add API key","Generate"].map((s,i)=>(
                   <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,maxWidth:80}}>
-                    <div style={{width:28,height:28,borderRadius:"50%",background:"#0f2d52",color:"#fff",
+                    <div style={{width:28,height:28,borderRadius:"50%",background:"#0ba13b",color:"#fff",
                       fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",
                       fontFamily:"'DM Mono',monospace"}}>{i+1}</div>
                     <span style={{fontSize:11,color:"#9ca3af",textAlign:"center"}}>{s}</span>
