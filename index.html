@@ -52,7 +52,7 @@ function buildPrompt(location, scopes) {
 
 LOCATION: ${location}
 
-Use your knowledge of this area and publicly available information (demographic data, planning frameworks, market intelligence, geographic context) to synthesise a rigorous briefing.
+Use your knowledge of this area and publicly available information (demographic data, planning frameworks, market intelligence, geographic context) with in-text references (sources) to synthesise a rigorous briefing.
 
 Selected domains to cover:
 ${scopes.map((s,i) => `${i+1}. ${desc[s]}`).join("\n")}
