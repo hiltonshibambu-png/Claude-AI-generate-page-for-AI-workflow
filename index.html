@@ -191,6 +191,73 @@ function App() {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
 
+  // Detect if running inside an iframe (e.g. ArcGIS Experience Builder)
+  function isInIframe() {
+    try { return window.self !== window.top; } catch(e) { return true; }
+  }
+
+  // Save PDF bytes using the most appropriate method for the current context
+  function savePdfDoc(doc, filename) {
+    if (!isInIframe()) {
+      // Normal context — standard jsPDF save works fine
+      doc.save(filename);
+      return;
+    }
+
+    // Inside iframe — doc.save() is blocked by the host sandbox.
+    // Strategy 1: open blob URL in a new tab (works if allow-popups is set)
+    try {
+      const blob = doc.output("blob");
+      const url  = URL.createObjectURL(blob);
+      const win  = window.open(url, "_blank");
+      if (win) {
+        // Clean up object URL after the new tab has loaded
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return;
+      }
+    } catch(e) { /* fall through */ }
+
+    // Strategy 2: inject a temporary <a> with download attr and click it
+    // (works in some sandboxed iframes that allow downloads via user gesture)
+    try {
+      const blob = doc.output("blob");
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = filename;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 5000);
+      return;
+    } catch(e) { /* fall through */ }
+
+    // Strategy 3: postMessage the base64 PDF to the parent frame.
+    // ArcGIS Experience Builder (or any parent) can listen for this message
+    // and trigger the download on the top-level page where it is not blocked.
+    try {
+      const b64 = doc.output("datauristring"); // data:application/pdf;base64,...
+      window.parent.postMessage(
+        { type: "FERNY_PDF_EXPORT", filename, dataUri: b64 },
+        "*"   // use your ArcGIS origin in production for extra security
+      );
+      alert(
+        "Your browser blocked the automatic download inside the embedded viewer.\n\n" +
+        "A download request has been sent to the parent page.\n\n" +
+        "If nothing happens, open the tool in a standalone tab to export."
+      );
+      return;
+    } catch(e) { /* fall through */ }
+
+    // Strategy 4: last resort — open a data URI in a new tab
+    try {
+      const dataUri = doc.output("datauristring");
+      window.open(dataUri, "_blank");
+    } catch(e) {
+      alert("PDF export failed: your browser security settings prevent downloads from embedded apps. Please open this tool in a standalone tab.");
+    }
+  }
+
   async function exportPDF() {
     if (!report) return;
     setExporting(true);
@@ -335,7 +402,7 @@ function App() {
         doc.text("Powered by Fernridge Solutions",pageW/2,pageH-5,{align:"center"});
       }
       const slug=(report.location_confirmed||"report").replace(/[^a-z0-9]/gi,"-").toLowerCase().slice(0,40);
-      doc.save("site-intelligence-"+slug+".pdf");
+      savePdfDoc(doc, "site-intelligence-"+slug+".pdf");
     } catch(e){
       console.error("PDF export error:",e);
       alert("PDF export failed: "+e.message);
@@ -697,5 +764,24 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
+<!--
+  ── ArcGIS Experience Builder — PDF Export Setup ──────────────────────────────
+  If the automatic download is still blocked inside Experience Builder, add this
+  snippet to the PARENT page via a Custom HTML widget or the page's <head>.
+  It receives the PDF blob the iframe sends via postMessage and triggers the
+  download from the top-level page where the browser permits it:
+
+  <script>
+    window.addEventListener("message", function(event) {
+      if (!event.data || event.data.type !== "FERNY_PDF_EXPORT") return;
+      var a = document.createElement("a");
+      a.href = event.data.dataUri;
+      a.download = event.data.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  </script>
+──────────────────────────────────────────────────────────────────────────── -->
 </body>
 </html>
