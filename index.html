@@ -42,7 +42,7 @@ const DOMAINS = [
 ];
 const DMAP = Object.fromEntries(DOMAINS.map(d => [d.id, d]));
 
-function buildPrompt(location, scopes) {
+function buildPrompt(location, scopes, site_type) {
   const desc = {
     regional:   "Regional & Retail Node Context - place the site within the broader retail system, major access routes, nearby retail nodes, and the role of the area in the retail hierarchy",
     site:       "Retail Site Context - immediate site surroundings, visibility, accessibility, road exposure, passing trade potential, adjacent uses, and position within the retail node",
@@ -55,6 +55,7 @@ function buildPrompt(location, scopes) {
   return `You are a senior retail site analyst. Produce a concise Retail Area Overview and Site Context Report for:
 
 LOCATION: ${location}
+SITE TYPE: ${site_type}
 
 Focus on:
 - the surrounding retail area
@@ -106,7 +107,53 @@ Writing guidance:
 Only include sections for the selected domains.`;
 }
 
-// ── COMPONENTS ────────────────────────────────────────────────────────────────
+// ── BASIC PROMPT — condensed variant, same schema, 3-4 sentence narratives ──
+function buildBasicPrompt(location, scopes, site_type) {
+  const desc = {
+    regional:     "Regional & Retail Node Context - the site's position in the broader retail hierarchy, key access routes, and nearby retail nodes",
+    site:         "Retail Site Context - immediate surroundings, visibility, accessibility, and position within the retail node",
+    behaviour:    "Catchment & Shopper Behaviour - likely catchment, travel patterns, and whether the node is convenience-led, transient, or destination-driven",
+    demographics: "Retail Market Profile - surrounding consumer base, income profile, and broad target-market relevance",
+    competition:  "Retail Structure, Competition & Synergy - competing centres, key anchors, and whether the node is saturated, underprovided, or well-balanced",
+    growth:       "Retail Growth Signals - major developments and area growth likely to influence future retail performance",
+    positioning:  "Retail Site Positioning Insight - the site's likely retail role, strongest support factor, and main trading constraint",
+  };
+  return `You are a retail site analyst. Produce a concise Basic Retail Site Overview for:
+
+LOCATION: ${location}
+SITE TYPE: ${site_type}
+
+Scope:
+- Desktop-level retail context only
+- NOT a full feasibility study or modelling exercise
+- No zoning, planning overlays, or development rights
+- Write in plain professional language
+
+Selected domains to cover:
+${scopes.map((s,i) => `${i+1}. ${desc[s]}`).join("\n")}
+
+Return ONLY a valid JSON object — no markdown fencing, no preamble — matching this exact schema:
+{
+  "location_confirmed": "Full resolved place name / address",
+  "coordinates_approx": "Approx lat, lng",
+  "report_date": "Month Year",
+  "executive_summary": "2-3 sentence plain-language summary of the key site-fit findings",
+  "sections": [
+    {
+      "domain": "regional|site|behaviour|demographics|competition|growth|positioning",
+      "headline": "Short factual headline, max 10 words",
+      "narrative": "3-4 sentence plain-language summary covering the key point for this domain. Avoid deep analysis — state the main finding, one supporting observation, and a brief implication for the site.",
+      "overall_narrative": "",
+      "positioning_note": "",
+      "key_points": ["Up to 2 concise bullet points"],
+      "confidence": 0.80,
+      "limitations": "One sentence on data caveats"
+    }
+  ]
+}
+
+Only include sections for the selected domains.`;
+}
 function Spinner() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
@@ -213,6 +260,8 @@ function App() {
   const [loading,  setLoading]  = useState(false);
   const [progress, setProgress] = useState([]);
   const [history,  setHistory]  = useState([]);
+  const [siteType,   setSiteType]   = useState("Retail");
+  const [reportType, setReportType] = useState("Advanced Report");
 
   const toggleScope = id => setScopes(p => p.includes(id)?p.filter(s=>s!==id):[...p,id]);
   const delay = ms => new Promise(r=>setTimeout(r,ms));
@@ -477,18 +526,45 @@ function App() {
         body:JSON.stringify({
           model:"claude-opus-4-6",
           max_tokens:8192,
-          messages:[{role:"user",content:buildPrompt(location,scopes)}]
+          messages:[{role:"user",content:
+            reportType === "Basic Report"
+              ? buildBasicPrompt(location, scopes, siteType)
+              : buildPrompt(location, scopes, siteType)
+          }]
         }),
       });
-      if (!res.ok){
-        const e = await res.json().catch(()=>({}));
-        throw new Error(e?.error?.message||`API error ${res.status}`);
-      }
-      const result = await res.json();
 
-      // Check for upstream truncation before attempting to parse
-      const stopReason = result.stop_reason;
-      if (stopReason === "max_tokens") {
+      // Read raw text first so we can handle non-JSON proxy errors (e.g. Cloudflare 524 timeout)
+      const rawText = await res.text();
+
+      if (!res.ok) {
+        // Try to parse as a structured Anthropic error
+        let apiMsg = "";
+        try { apiMsg = JSON.parse(rawText)?.error?.message || ""; } catch(_) {}
+
+        // Detect Cloudflare / proxy timeout codes in plain-text responses
+        if (!apiMsg && /error code:\s*52[0-9]/i.test(rawText)) {
+          throw new Error(
+            "The proxy timed out (Cloudflare 52x) — the report takes longer than the proxy allows. " +
+            "Enter your own Claude API key in the sidebar to bypass the proxy and fix this error."
+          );
+        }
+
+        throw new Error(apiMsg || `API error ${res.status}: ${rawText.slice(0, 120)}`);
+      }
+
+      // Parse the successful response envelope
+      let result;
+      try {
+        result = JSON.parse(rawText);
+      } catch(_) {
+        throw new Error(
+          "Unexpected response from proxy — please use your own API key in the sidebar."
+        );
+      }
+
+      // Check for upstream truncation before attempting to parse the report JSON
+      if (result.stop_reason === "max_tokens") {
         throw new Error(
           "The report was too long and got cut off. Try selecting fewer domains (3–4) and regenerating."
         );
@@ -499,19 +575,12 @@ function App() {
       // Robust JSON extractor — strips fences, finds the outermost { … } block,
       // and attempts to recover a truncated response by closing open structures.
       function extractJSON(str) {
-        // 1. Strip markdown fences if present
         let s = str.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-
-        // 2. Find the first { and the LAST } to isolate the JSON object
         const start = s.indexOf("{");
         const end   = s.lastIndexOf("}");
         if (start === -1) throw new Error("No JSON object found in the API response.");
-
-        // 3. If response was truncated there may be no closing } — attempt repair
         if (end === -1 || end < start) {
-          // Close any open string, arrays, and objects
           s = s.slice(start);
-          // Count unclosed brackets/braces
           let inStr = false, escape = false, braces = 0, brackets = 0;
           for (const ch of s) {
             if (escape)          { escape = false; continue; }
@@ -523,15 +592,12 @@ function App() {
             else if (ch === "[") brackets++;
             else if (ch === "]") brackets--;
           }
-          // If we're mid-string, close it
           if (inStr) s += '"';
-          // Close any open arrays then objects
           s += "]".repeat(Math.max(0, brackets));
           s += "}".repeat(Math.max(0, braces));
         } else {
           s = s.slice(start, end + 1);
         }
-
         return JSON.parse(s);
       }
 
@@ -614,7 +680,38 @@ function App() {
             </div>
           </div>
 
-          {/* API Key */}
+          {/* Site Type */}
+          <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+              color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:8}}>Site Type</div>
+            <select
+              value={siteType}
+              onChange={e=>setSiteType(e.target.value)}
+              style={{...inp,appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 10px center",paddingRight:30,cursor:"pointer"}}>
+              <option value="Retail">Retail</option>
+              <option value="Education">Education</option>
+              <option value="Healthcare">Healthcare</option>
+              <option value="Shopping Centre">Shopping Centre</option>
+            </select>
+          </div>
+
+          {/* Report Type */}
+          <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+              color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:8}}>Report Type</div>
+            <select
+              value={reportType}
+              onChange={e=>setReportType(e.target.value)}
+              style={{...inp,appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 10px center",paddingRight:30,cursor:"pointer"}}>
+              <option value="Advanced Report">Advanced Report</option>
+              <option value="Basic Report">Basic Report</option>
+            </select>
+            <div style={{marginTop:6,fontSize:10.5,color:"#9ca3af",lineHeight:1.6}}>
+              {reportType==="Basic Report"
+                ? "Key paragraphs per domain — fast, plain-language overview."
+                : "Full synthesis with insights, key points, and confidence scores."}
+            </div>
+          </div>
           <div style={{padding:"14px 18px",borderBottom:"1px solid #f3f4f6"}}>
             <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
               color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:6}}>
