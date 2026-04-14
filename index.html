@@ -32,27 +32,46 @@ const PROXY_URL = "https://yellow-poetry-77ff.hiltonshibambu.workers.dev";
 
 // ── DOMAIN CONFIG ─────────────────────────────────────────────────────────────
 const DOMAINS = [
-  { id:"geographic",   label:"Geographic Overview",              icon:"◈", color:"#000000", bg:"#ebebeb" },
-  { id:"market",       label:"Market Landscape",                 icon:"◎", color:"#000000", bg:"#ebebeb" },
-  { id:"competitor",   label:"Competitor Mapping",               icon:"◉", color:"#000000", bg:"#ebebeb" },
-  { id:"demographics", label:"Demographic & Economic Profiling", icon:"◍", color:"#000000", bg:"#ebebeb"},
-  { id:"feasibility",  label:"Development Feasibility Context",  icon:"◐", color:"#000000", bg:"#ebebeb" },
+  { id:"regional",   label:"regional",                           icon:"◈", color:"#000000", bg:"#ebebeb" },
+  { id:"site",       label:"site",                               icon:"◎", color:"#000000", bg:"#ebebeb" },
+  { id:"behaviour",   label:"behaviour",                         icon:"◉", color:"#000000", bg:"#ebebeb" },
+  { id:"demographics", label:"Demographics",                     icon:"◍", color:"#000000", bg:"#ebebeb"},
+  { id:"competition",  label:"competition",                      icon:"◐", color:"#000000", bg:"#ebebeb" },
+  { id:"growth",  label:"growth",                                icon:"◐", color:"#000000", bg:"#ebebeb" },
+  { id:"positioning",  label:"positioning",                      icon:"◐", color:"#000000", bg:"#ebebeb" },
 ];
 const DMAP = Object.fromEntries(DOMAINS.map(d => [d.id, d]));
 
 function buildPrompt(location, scopes) {
   const desc = {
-    geographic:   "Geographic Overview — site description, land use classification, physical environment, terrain, connectivity, proximity to transport nodes and CBD",
-    market:       "Market Landscape — local economic conditions, commercial property market, sector activity, retail and office dynamics, growth signals, recent investment activity",
-    competitor:   "Competitor Mapping — nearby competing businesses and land uses, market saturation, competitive white space, proximity analysis by distance band",
-    demographics: "Demographic & Economic Profiling — population size and composition, age cohorts, household income, employment industries, dominant consumer segments, spending capacity",
-    feasibility:  "Development Feasibility Context — zoning classification and permitted uses, planning overlays, infrastructure capacity, development risk indicators, recent comparable approvals",
+    regional:   "Regional & Retail Node Context - place the site within the broader retail system, major access routes, nearby retail nodes, and the role of the area in the retail hierarchy",
+    site:       "Retail Site Context - immediate site surroundings, visibility, accessibility, road exposure, passing trade potential, adjacent uses, and position within the retail node",
+    behaviour:   "Catchment & Shopper Behaviour - likely catchment area, travel patterns, inflow potential, shopper movement, and whether the node is convenience-led, transient, or destination-driven",
+    demographics: "Retail Market Profile - surrounding consumer base, income profile, household composition, and broad target-market relevance, with interpretation rather than raw data",
+    competition:  "Retail Structure, Competition & Synergy - competing centres, anchors, national brands, independent supply, complementary uses, and whether the node appears saturated, underprovided, or well-balanced",
+    growth:  "Retail Growth Signals - major developments, infrastructure changes, retail expansion, and broader area growth likely to influence future retail performance",
+    positioning:  "Retail Site Positioning Insight - concise interpretation of the site’s likely retail role, strongest support factor, and main observable trading constraint or dependency",
   };
-  return `You are a senior site and market intelligence analyst. Produce a professional Site & Market Intelligence Report for:
+  return `You are a senior retail site analyst. Produce a concise Retail Area Overview and Site Context Report for:
 
 LOCATION: ${location}
 
-Use your knowledge of this area and publicly available information (demographic data, planning frameworks, market intelligence, geographic context) with in-text references (sources) to synthesise a rigorous briefing.
+Focus on:
+- the surrounding retail area
+- the role of the retail node
+- catchment and shopper behaviour
+- competition and synergy
+- the site’s likely retail fit within that context
+
+Use publicly available information (with in-text reference sources) and spatial reasoning to produce a grounded desktop-level retail interpretation.
+
+Important scope:
+- NOT a full feasibility study
+- NOT a modelling exercise
+- Do NOT include zoning, planning overlays, or development rights analysis
+- Do NOT overload the output with raw data
+- Focus on retail context, shopper logic, node dynamics, and site fit
+- Write in a professional desktop retail report style
 
 Selected domains to cover:
 ${scopes.map((s,i) => `${i+1}. ${desc[s]}`).join("\n")}
@@ -62,19 +81,29 @@ Return ONLY a valid JSON object — no markdown fencing, no preamble — matchin
   "location_confirmed": "Full resolved place name / address",
   "coordinates_approx": "Approx lat, lng",
   "report_date": "Month Year",
-  "executive_summary": "3–4 sentence synthesis of the most critical cross-domain findings and overall site verdict",
+  "executive_summary": "3-4 sentence summary of the key retail, node, and site-fit findings",
   "sections": [
     {
-      "domain": "geographic|market|competitor|demographics|feasibility",
-      "headline": "Single punchy insight headline, max 12 words",
-      "narrative": "180–260 word professional narrative with specific local context, factual grounding, and analyst interpretation",
-      "key_points": ["Up to 6 concise data points or insights"],
+      "domain": "regional|site|behaviour|demographics|competition|growth|positioning",
+      "headline": "Single punchy retail insight headline, max 12 words",
+      "narrative": "80-140 word professional narrative with local retail interpretation",
+      "overall_narrative": "120-180 word synthesis of node context, shopper behaviour, competition, and site relevance",
+      "positioning_note": "State the likely retail role of the site, the strongest supporting factor, and the main observable trading constraint or dependency",
+      "key_points": ["Up to 3 concise retail insights"],
       "confidence": 0.85,
-      "limitations": "One sentence on data gaps or caveats"
+      "limitations": "One sentence on desktop-level caveats or information gaps"
     }
   ]
 }
-Only include sections for the selected domains. Be specific and factual. Note uncertainty in limitations.`;
+Writing guidance:
+- Prefer synthesis over description
+- Avoid filler and generic language
+- Keep it specific, local, and commercially grounded
+- Use demographics only as supporting context
+- Distinguish between convenience, transient, and destination retail where relevant
+- The output should read like a retail analyst contextualising a site, not a model dumping data
+
+Only include sections for the selected domains.`;
 }
 
 // ── COMPONENTS ────────────────────────────────────────────────────────────────
@@ -662,7 +691,7 @@ function App() {
               </div>
               <div style={{fontFamily:"'DM Serif Display',Segoe UI",fontSize:22,color:"#1f2937"}}>No Location Selected</div>
               <div style={{fontSize:13,color:"#6b7280",maxWidth:300,lineHeight:1.7}}>
-                Enter an address or name (POI) of your site, select your intelligence domains, and generate a full site report.
+                Enter an address or name (POI) of your site, select your intelligence domains, and generate a desktop site report.
               </div>
               <div style={{display:"flex",gap:20,marginTop:8}}>
                 {["Enter location","Add API key","Generate"].map((s,i)=>(
