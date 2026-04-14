@@ -32,13 +32,13 @@ const PROXY_URL = "https://yellow-poetry-77ff.hiltonshibambu.workers.dev";
 
 // ── DOMAIN CONFIG ─────────────────────────────────────────────────────────────
 const DOMAINS = [
-  { id:"regional",   label:"regional",                           icon:"◈", color:"#000000", bg:"#ebebeb" },
-  { id:"site",       label:"site",                               icon:"◎", color:"#000000", bg:"#ebebeb" },
-  { id:"behaviour",   label:"behaviour",                         icon:"◉", color:"#000000", bg:"#ebebeb" },
-  { id:"demographics", label:"Demographics",                     icon:"◍", color:"#000000", bg:"#ebebeb"},
-  { id:"competition",  label:"competition",                      icon:"◐", color:"#000000", bg:"#ebebeb" },
-  { id:"growth",  label:"growth",                                icon:"◐", color:"#000000", bg:"#ebebeb" },
-  { id:"positioning",  label:"positioning",                      icon:"◐", color:"#000000", bg:"#ebebeb" },
+  { id:"regional",     label:"regional",     icon:"◈", color:"#000000", bg:"#ebebeb", num:"01" },
+  { id:"site",         label:"site",         icon:"◎", color:"#000000", bg:"#ebebeb", num:"02" },
+  { id:"behaviour",    label:"behaviour",    icon:"◉", color:"#000000", bg:"#ebebeb", num:"03" },
+  { id:"demographics", label:"Demographics", icon:"◍", color:"#000000", bg:"#ebebeb", num:"04" },
+  { id:"competition",  label:"competition",  icon:"◐", color:"#000000", bg:"#ebebeb", num:"05" },
+  { id:"growth",       label:"growth",       icon:"◐", color:"#000000", bg:"#ebebeb", num:"06" },
+  { id:"positioning",  label:"positioning",  icon:"◐", color:"#000000", bg:"#ebebeb", num:"07" },
 ];
 const DMAP = Object.fromEntries(DOMAINS.map(d => [d.id, d]));
 
@@ -299,9 +299,13 @@ function App() {
       const contentW = pageW - margin * 2;
       let y = 0;
       const domainLabels = {
-        geographic:"Geographic Overview", market:"Market Landscape",
-        competitor:"Competitor Mapping", demographics:"Demographic & Economic Profiling",
-        feasibility:"Development Feasibility Context",
+        regional:     "Regional & Retail Node Context",
+        site:         "Retail Site Context",
+        behaviour:    "Catchment & Shopper Behaviour",
+        demographics: "Retail Market Profile",
+        competition:  "Retail Structure, Competition & Synergy",
+        growth:       "Retail Growth Signals",
+        positioning:  "Retail Site Positioning Insight",
       };
       function checkPage(needed=10){if(y+needed>pageH-16){doc.addPage();y=margin;}}
       function wrapText(text,maxW,fs){doc.setFontSize(fs);return doc.splitTextToSize(String(text||""),maxW);}
