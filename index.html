@@ -427,7 +427,7 @@ function App() {
         const nl=wrapText(sec.narrative,contentW-8,9);
         const kpl=sec.key_points||[];
         const kpRows=Math.ceil(kpl.length/2);
-        const kpH=kpRows>0?kpRows*10+6:0;
+        const kpH=kpRows>0?kpRows*18+6:0;
         const ll=sec.limitations?wrapText("Note: "+sec.limitations,contentW-14,8):[];
         const lH=ll.length>0?ll.length*4.8+8:0;
         checkPage(16+nl.length*5+kpH+lH+12);
@@ -443,7 +443,7 @@ function App() {
         const cc=pct>=80?[22,163,74]:pct>=60?[217,119,6]:[220,38,38];
         doc.setTextColor(...cc);doc.setFontSize(7);doc.setFont("helvetica","normal");
         doc.text(pct+"% confidence",pageW-margin-2,y+6,{align:"right"});
-        y+=12;
+        y+=17;
         // Headline
         checkPage(10);
         doc.setTextColor(15,45,82);doc.setFontSize(11);doc.setFont("helvetica","bold");
@@ -453,20 +453,45 @@ function App() {
         checkPage(nl.length*5+5);
         doc.setTextColor(55,65,81);doc.setFontSize(9);doc.setFont("helvetica","normal");
         drawJustified(nl,margin,y,5,contentW-8);y+=nl.length*5+6;
-        // Key points
+        // Key points — dynamic height per card so full sentences are never truncated
         if(kpl.length>0){
           checkPage(kpH+5);
           const colW=(contentW-4)/2;
-          kpl.slice(0,6).forEach((kp,ki)=>{
-            const col=ki%2,row=Math.floor(ki/2);
-            const kpX=margin+col*(colW+4),kpY=y+row*10;
-            doc.setFillColor(249,250,251);doc.setDrawColor(226,232,240);doc.setLineWidth(0.2);
-            doc.roundedRect(kpX,kpY,colW,8.5,1,1,"FD");
-            doc.setFillColor(30,114,184);doc.circle(kpX+4.5,kpY+4.25,1.2,"F");
-            doc.setFontSize(8.5);doc.setTextColor(55,65,81);doc.setFont("helvetica","normal");
-            doc.text(doc.splitTextToSize(kp,colW-10)[0],kpX+8,kpY+5.8);
+          // First pass: wrap each key point and calculate row heights
+          const kpWrapped = kpl.slice(0,6).map(kp => {
+            doc.setFontSize(8.5);
+            const lines = doc.splitTextToSize(String(kp||""), colW-12);
+            const boxH = lines.length * 4.8 + 6;
+            return { lines, boxH };
           });
-          y+=kpRows*10+5;
+          // Group into rows of 2 and track cumulative y offsets
+          const rowOffsets = [];
+          let rowY = y;
+          for(let r = 0; r < Math.ceil(kpWrapped.length/2); r++){
+            const left  = kpWrapped[r*2];
+            const right = kpWrapped[r*2+1];
+            const rowH  = Math.max(left ? left.boxH : 0, right ? right.boxH : 0);
+            rowOffsets.push({ rowY, rowH });
+            rowY += rowH + 3;
+          }
+          // Second pass: draw
+          kpWrapped.forEach((kp, ki) => {
+            const col = ki % 2;
+            const row = Math.floor(ki / 2);
+            const kpX = margin + col * (colW + 4);
+            const kpY = rowOffsets[row].rowY;
+            const rowH = rowOffsets[row].rowH;
+            doc.setFillColor(249,250,251);doc.setDrawColor(226,232,240);doc.setLineWidth(0.2);
+            doc.roundedRect(kpX, kpY, colW, rowH, 1, 1, "FD");
+            doc.setFillColor(30,114,184);doc.circle(kpX+4.5, kpY+5, 1.2, "F");
+            doc.setFontSize(8.5);doc.setTextColor(55,65,81);doc.setFont("helvetica","normal");
+            kp.lines.forEach((line, li) => {
+              doc.text(line, kpX+10, kpY+5.8+(li*4.8));
+            });
+          });
+          // Advance y past all rows
+          y = rowY;
+          y += 3;
         }
         // Limitations
         if(sec.limitations&&ll.length>0){
