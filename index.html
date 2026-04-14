@@ -476,7 +476,7 @@ function App() {
         headers: reqHeaders,
         body:JSON.stringify({
           model:"claude-opus-4-6",
-          max_tokens:4096,
+          max_tokens:8192,
           messages:[{role:"user",content:buildPrompt(location,scopes)}]
         }),
       });
@@ -485,8 +485,57 @@ function App() {
         throw new Error(e?.error?.message||`API error ${res.status}`);
       }
       const result = await res.json();
-      const raw = result.content?.[0]?.text||"";
-      const data = JSON.parse(raw.replace(/^```json\s*/i,"").replace(/```\s*$/,"").trim());
+
+      // Check for upstream truncation before attempting to parse
+      const stopReason = result.stop_reason;
+      if (stopReason === "max_tokens") {
+        throw new Error(
+          "The report was too long and got cut off. Try selecting fewer domains (3–4) and regenerating."
+        );
+      }
+
+      const raw = result.content?.[0]?.text || "";
+
+      // Robust JSON extractor — strips fences, finds the outermost { … } block,
+      // and attempts to recover a truncated response by closing open structures.
+      function extractJSON(str) {
+        // 1. Strip markdown fences if present
+        let s = str.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+
+        // 2. Find the first { and the LAST } to isolate the JSON object
+        const start = s.indexOf("{");
+        const end   = s.lastIndexOf("}");
+        if (start === -1) throw new Error("No JSON object found in the API response.");
+
+        // 3. If response was truncated there may be no closing } — attempt repair
+        if (end === -1 || end < start) {
+          // Close any open string, arrays, and objects
+          s = s.slice(start);
+          // Count unclosed brackets/braces
+          let inStr = false, escape = false, braces = 0, brackets = 0;
+          for (const ch of s) {
+            if (escape)          { escape = false; continue; }
+            if (ch === "\\")     { escape = true;  continue; }
+            if (ch === '"')      { inStr = !inStr;  continue; }
+            if (inStr)           continue;
+            if (ch === "{")      braces++;
+            else if (ch === "}") braces--;
+            else if (ch === "[") brackets++;
+            else if (ch === "]") brackets--;
+          }
+          // If we're mid-string, close it
+          if (inStr) s += '"';
+          // Close any open arrays then objects
+          s += "]".repeat(Math.max(0, brackets));
+          s += "}".repeat(Math.max(0, braces));
+        } else {
+          s = s.slice(start, end + 1);
+        }
+
+        return JSON.parse(s);
+      }
+
+      const data = extractJSON(raw);
 
       setProgress(p=>p.map(s=>s.id==="ai"?{...s,status:"done"}:s.id==="render"?{...s,status:"active"}:s));
       await delay(300);
