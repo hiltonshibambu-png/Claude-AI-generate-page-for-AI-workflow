@@ -42,7 +42,15 @@ const DOMAINS = [
 ];
 const DMAP = Object.fromEntries(DOMAINS.map(d => [d.id, d]));
 
-function buildPrompt(location, scopes, site_type) {
+function buildPrompt(location, scopes, site_type, brand_name) {
+  const brandLine = brand_name
+    ? `BRAND / OPERATOR: ${brand_name}`
+    : `BRAND / OPERATOR: Not specified`;
+  const brandContext = brand_name
+    ? `- Where relevant, frame findings in the context of ${brand_name}'s typical store format, customer profile, and competitive positioning
+- Assess whether the location and node dynamics are consistent with ${brand_name}'s known site selection criteria
+- Note any direct ${brand_name} competitors or complementary brands already present in the trade area`
+    : `- Assess the location on its merits for the stated site type without reference to a specific brand`;
   const desc = {
     regional:   "Regional & Retail Node Context - place the site within the broader retail system, major access routes, nearby retail nodes, and the role of the area in the retail hierarchy",
     site:       "Retail Site Context - immediate site surroundings, visibility, accessibility, road exposure, passing trade potential, adjacent uses, and position within the retail node",
@@ -56,6 +64,7 @@ function buildPrompt(location, scopes, site_type) {
 
 LOCATION: ${location}
 SITE TYPE: ${site_type}
+${brandLine}
 
 Focus on:
 - the surrounding retail area
@@ -63,6 +72,7 @@ Focus on:
 - catchment and shopper behaviour
 - competition and synergy
 - the site’s likely retail fit within that context
+${brand_name ? `- brand-specific fit and competitive positioning for ${brand_name}` : ""}
 
 Use publicly available information (with in-text reference sources) and spatial reasoning to produce a grounded desktop-level retail interpretation.
 
@@ -73,6 +83,7 @@ Important scope:
 - Do NOT overload the output with raw data
 - Focus on retail context, shopper logic, node dynamics, and site fit
 - Write in a professional desktop retail report style
+${brandContext}
 
 Selected domains to cover:
 ${scopes.map((s,i) => `${i+1}. ${desc[s]}`).join("\n")}
@@ -108,7 +119,13 @@ Only include sections for the selected domains.`;
 }
 
 // ── BASIC PROMPT — condensed variant, same schema, 3-4 sentence narratives ──
-function buildBasicPrompt(location, scopes, site_type) {
+function buildBasicPrompt(location, scopes, site_type, brand_name) {
+  const brandLine = brand_name
+    ? `BRAND / OPERATOR: ${brand_name}`
+    : `BRAND / OPERATOR: Not specified`;
+  const brandContext = brand_name
+    ? `- Frame findings in the context of ${brand_name} where relevant, including any known direct competitors or complementary operators in the area`
+    : "";
   const desc = {
     regional:     "Regional & Retail Node Context - the site's position in the broader retail hierarchy, key access routes, and nearby retail nodes",
     site:         "Retail Site Context - immediate surroundings, visibility, accessibility, and position within the retail node",
@@ -122,12 +139,14 @@ function buildBasicPrompt(location, scopes, site_type) {
 
 LOCATION: ${location}
 SITE TYPE: ${site_type}
+${brandLine}
 
 Scope:
 - Desktop-level retail context only
 - NOT a full feasibility study or modelling exercise
 - No zoning, planning overlays, or development rights
 - Write in plain professional language
+${brandContext}
 
 Selected domains to cover:
 ${scopes.map((s,i) => `${i+1}. ${desc[s]}`).join("\n")}
@@ -254,6 +273,7 @@ function App() {
   const [address,  setAddress]  = useState("");
   const [lat,      setLat]      = useState("");
   const [lng,      setLng]      = useState("");
+  const [brandName, setBrandName] = useState("");
   const [scopes,   setScopes]   = useState(DOMAINS.map(d=>d.id));
   const [report,   setReport]   = useState(null);
   const [error,    setError]    = useState("");
@@ -528,8 +548,8 @@ function App() {
           max_tokens:8192,
           messages:[{role:"user",content:
             reportType === "Basic Report"
-              ? buildBasicPrompt(location, scopes, siteType)
-              : buildPrompt(location, scopes, siteType)
+              ? buildBasicPrompt(location, scopes, siteType, brandName)
+              : buildPrompt(location, scopes, siteType, brandName)
           }]
         }),
       });
@@ -657,6 +677,24 @@ function App() {
         {/* SIDEBAR */}
         <div style={{background:"#fff",borderRight:"1px solid #e5e7eb",
           display:"flex",flexDirection:"column",overflowY:"auto"}}>
+
+          {/* Brand / Operator Name */}
+          <div style={{padding:"18px 18px 14px",borderBottom:"1px solid #f3f4f6"}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+              color:"#9ca3af",fontFamily:"'DM Mono',monospace",marginBottom:6}}>
+              Brand / Operator
+              <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,color:"#c0c8d4"}}> — optional</span>
+            </div>
+            <input
+              value={brandName}
+              onChange={e=>setBrandName(e.target.value)}
+              placeholder="e.g. Woolworths, Chemist Warehouse…"
+              style={inp}
+            />
+            <div style={{marginTop:6,fontSize:10.5,color:"#9ca3af",lineHeight:1.6}}>
+              Enter a brand to tailor the analysis to its customer profile, format, and competitive set.
+            </div>
+          </div>
 
           {/* Location */}
           <div style={{padding:"18px 18px 14px",borderBottom:"1px solid #f3f4f6"}}>
